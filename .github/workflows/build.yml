@@ -25,7 +25,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: ./hyperion.ng-repo
+        working-directory: ./hyperion.ng
 
     steps:
       - uses: actions/checkout@v4
