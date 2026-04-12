@@ -87,8 +87,7 @@ jobs:
           sudo apt update
           sudo apt install -y ${{ env.apt_deps }}
 
-      - name: "Build QT: Core, Network, SerialPort, Gui, Widgets, SQL, und WebSockets"
-        # credits to https://github.com/awawa-dev/HyperDockerBuilder/blob/6c5b3fcfee013265be3f3732db641daa2fc7988a/build.sh
+      - name: "Build QT: Core, Gui, Network, Sql und Widgets"
         if: steps.cache-toolchain.outputs.cache-hit != 'true'
         run: |
           mkdir -p ${QT_DIR}
@@ -139,7 +138,7 @@ jobs:
               -device linux-webos-g++ \
               -device-option CROSS_COMPILE=$TOOLCHAIN_DIR/bin/arm-webos-linux-gnueabi- \
               -qt-host-path ${QT_TOOLCHAIN_DIR} \
-              -no-dbus -no-gui -no-widgets -no-sql-sqlite -no-icu \
+              -no-dbus -no-icu \
               -nomake tests -nomake examples \
               -- -DCMAKE_TOOLCHAIN_FILE=${TOOLCHAIN_FILE} \
               -DQt6CoreTools_DIR=$QT_TOOLCHAIN_DIR/lib/cmake/Qt6CoreTools \
