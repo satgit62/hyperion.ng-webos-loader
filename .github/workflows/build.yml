@@ -87,7 +87,7 @@ jobs:
           sudo apt update
           sudo apt install -y ${{ env.apt_deps }}
 
-      - name: "Build QT: Core, Network and SerialPort"
+      - name: "Build QT: Core, Network, SerialPort, Gui, Widgets, SQL, und WebSockets"
         # credits to https://github.com/awawa-dev/HyperDockerBuilder/blob/6c5b3fcfee013265be3f3732db641daa2fc7988a/build.sh
         if: steps.cache-toolchain.outputs.cache-hit != 'true'
         run: |
