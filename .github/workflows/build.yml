@@ -21,7 +21,7 @@ env:
 
 
 jobs:
-  build_hyperion.ng:
+  build_hyperion_ng:
     runs-on: ubuntu-latest
     defaults:
       run:
