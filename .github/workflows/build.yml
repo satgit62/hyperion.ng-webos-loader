@@ -1,4 +1,4 @@
-name: Hyperion webOS Qt6 Stable Build
+name: Hyperion webOS Qt6
 
 on:
   push:
@@ -24,9 +24,9 @@ jobs:
 
     steps:
 
-# -------------------------------------------------------
+# =========================================================
 # DEPENDENCIES
-# -------------------------------------------------------
+# =========================================================
       - name: Install dependencies
         run: |
           sudo apt update
@@ -34,9 +34,9 @@ jobs:
             build-essential cmake ninja-build git perl python3 pkg-config \
             ccache libegl1-mesa-dev libgles2-mesa-dev
 
-# -------------------------------------------------------
+# =========================================================
 # TOOLCHAIN
-# -------------------------------------------------------
+# =========================================================
       - name: Cache toolchain
         id: cache-toolchain
         uses: actions/cache@v4
@@ -54,9 +54,9 @@ jobs:
           cd ${TOOLCHAIN_DIR}
           sudo ./relocate-sdk.sh
 
-# -------------------------------------------------------
-# QT SOURCE (IMPORTANT FIX: FULL INIT)
-# -------------------------------------------------------
+# =========================================================
+# QT SOURCE (FULL INIT REQUIRED)
+# =========================================================
       - name: Fetch Qt6 source
         run: |
           git clone https://code.qt.io/qt/qt5.git qt6
@@ -64,10 +64,10 @@ jobs:
           git checkout v${QT_VERSION}
           perl init-repository
 
-# -------------------------------------------------------
-# HOST QT (CRITICAL FIX: CoreTools + syncqt)
-# -------------------------------------------------------
-      - name: Build Qt6 HOST
+# =========================================================
+# HOST QT (CORE TOOLS + syncqt FIX)
+# =========================================================
+      - name: Build Qt6 HOST (TOOLS ONLY)
         run: |
           cd qt6
           mkdir host-build
@@ -77,21 +77,23 @@ jobs:
             -GNinja \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_INSTALL_PREFIX=${QT_HOST_PREFIX} \
+            -DQT_BUILD_TOOLS=ON \
             -DQT_BUILD_EXAMPLES=OFF \
             -DQT_BUILD_TESTS=OFF \
-            -DQT_BUILD_TOOLS=ON \
+            \
             -DQT_FEATURE_gui=ON \
             -DQT_FEATURE_network=ON \
-            -DQT_FEATURE_widgets=OFF \
-            -DQT_FEATURE_sql=OFF
+            -DQT_FEATURE_widgets=ON \
+            -DQT_FEATURE_sql=ON \
+            -DQT_FEATURE_dbus=ON
 
           cmake --build . --parallel
           cmake --install .
 
-# -------------------------------------------------------
-# ARM QT (WEBOS TARGET)
-# -------------------------------------------------------
-      - name: Build Qt6 ARM
+# =========================================================
+# ARM QT (FULL MODULE SET FOR HYPERION)
+# =========================================================
+      - name: Build Qt6 ARM (FULL MODULES)
         run: |
           source ${TOOLCHAIN_ENV_FILE}
 
@@ -104,31 +106,46 @@ jobs:
             -DCMAKE_TOOLCHAIN_FILE=${TOOLCHAIN_FILE} \
             -DCMAKE_INSTALL_PREFIX=${QT_ARM_PREFIX} \
             -DQT_HOST_PATH=${QT_HOST_PREFIX} \
+            \
             -DQT_BUILD_TOOLS=OFF \
             -DQT_BUILD_EXAMPLES=OFF \
             -DQT_BUILD_TESTS=OFF \
+            \
+            -DQT_FEATURE_core=ON \
             -DQT_FEATURE_gui=ON \
             -DQT_FEATURE_widgets=ON \
             -DQT_FEATURE_network=ON \
             -DQT_FEATURE_sql=ON \
+            -DQT_FEATURE_serialport=ON \
+            -DQT_FEATURE_websockets=ON \
+            -DQT_FEATURE_dbus=ON \
+            \
             -DQT_FEATURE_opengl=es2 \
             -DQT_FEATURE_egl=ON \
-            -DQT_FEATURE_dbus=OFF \
+            -DQT_FEATURE_imageformat_jpeg=ON \
+            \
             -DQT_FEATURE_icu=OFF
 
           cmake --build . --parallel
           cmake --install .
 
-# -------------------------------------------------------
-# VERIFY QT
-# -------------------------------------------------------
-      - name: Verify Qt6
+# =========================================================
+# VERIFY MODULES
+# =========================================================
+      - name: Verify Qt6 Modules
         run: |
+          test -f ${QT_ARM_PREFIX}/lib/cmake/Qt6Core/Qt6CoreConfig.cmake
           test -f ${QT_ARM_PREFIX}/lib/cmake/Qt6Gui/Qt6GuiConfig.cmake
+          test -f ${QT_ARM_PREFIX}/lib/cmake/Qt6Widgets/Qt6WidgetsConfig.cmake
+          test -f ${QT_ARM_PREFIX}/lib/cmake/Qt6Network/Qt6NetworkConfig.cmake
+          test -f ${QT_ARM_PREFIX}/lib/cmake/Qt6Sql/Qt6SqlConfig.cmake
+          test -f ${QT_ARM_PREFIX}/lib/cmake/Qt6DBus/Qt6DBusConfig.cmake
+          test -f ${QT_ARM_PREFIX}/lib/cmake/Qt6SerialPort/Qt6SerialPortConfig.cmake
+          test -f ${QT_ARM_PREFIX}/lib/cmake/Qt6WebSockets/Qt6WebSocketsConfig.cmake
 
-# -------------------------------------------------------
+# =========================================================
 # HYPERION BUILD
-# -------------------------------------------------------
+# =========================================================
       - name: Checkout Hyperion
         uses: actions/checkout@v4
         with:
@@ -153,9 +170,9 @@ jobs:
 
           cmake --build .
 
-# -------------------------------------------------------
+# =========================================================
 # RUNTIME PACKAGE
-# -------------------------------------------------------
+# =========================================================
       - name: Prepare release
         run: |
           rm -rf ${RELEASE_DIR}
@@ -163,10 +180,15 @@ jobs:
 
           cp ${BUILD_DIR}/bin/* ${RELEASE_DIR}/
 
+          # Qt runtime libs
           cp ${QT_ARM_PREFIX}/lib/libQt6Core.so* ${RELEASE_DIR}/
           cp ${QT_ARM_PREFIX}/lib/libQt6Gui.so* ${RELEASE_DIR}/
-          cp ${QT_ARM_PREFIX}/lib/libQt6Network.so* ${RELEASE_DIR}/
           cp ${QT_ARM_PREFIX}/lib/libQt6Widgets.so* ${RELEASE_DIR}/
+          cp ${QT_ARM_PREFIX}/lib/libQt6Network.so* ${RELEASE_DIR}/
+          cp ${QT_ARM_PREFIX}/lib/libQt6Sql.so* ${RELEASE_DIR}/
+          cp ${QT_ARM_PREFIX}/lib/libQt6SerialPort.so* ${RELEASE_DIR}/
+          cp ${QT_ARM_PREFIX}/lib/libQt6WebSockets.so* ${RELEASE_DIR}/
+          cp ${QT_ARM_PREFIX}/lib/libQt6DBus.so* ${RELEASE_DIR}/
 
           mkdir -p ${RELEASE_DIR}/plugins/{platforms,imageformats,sqldrivers}
 
@@ -174,9 +196,9 @@ jobs:
           cp ${QT_ARM_PREFIX}/plugins/imageformats/libqjpeg.so ${RELEASE_DIR}/plugins/imageformats/ || true
           cp ${QT_ARM_PREFIX}/plugins/sqldrivers/libqsqlite.so ${RELEASE_DIR}/plugins/sqldrivers/ || true
 
-# -------------------------------------------------------
+# =========================================================
 # AUTOSTART
-# -------------------------------------------------------
+# =========================================================
       - name: Create autostart
         run: |
           cat <<EOF > ${RELEASE_DIR}/start_hyperiond.sh
@@ -189,9 +211,9 @@ jobs:
 
           chmod +x ${RELEASE_DIR}/start_hyperiond.sh
 
-# -------------------------------------------------------
-# IPK BUILD
-# -------------------------------------------------------
+# =========================================================
+# IPK PACKAGE
+# =========================================================
       - name: Build IPK
         run: |
           mkdir -p ipk/CONTROL
@@ -204,18 +226,18 @@ jobs:
           Version: 1.0.0
           Architecture: armv7
           Maintainer: Hyperion Project
-          Description: Hyperion NG Qt6 webOS stable build
+          Description: Hyperion NG Qt6 FULL MODULE webOS build
           EOF
 
-          dpkg-deb --build ipk hyperion-webos-qt6.ipk
+          dpkg-deb --build ipk hyperion-webos-qt6-full.ipk
 
-# -------------------------------------------------------
+# =========================================================
 # ARTIFACT
-# -------------------------------------------------------
+# =========================================================
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: hyperion-webos-qt6
+          name: hyperion-webos-qt6-full
           path: |
-            hyperion-webos-qt6.ipk
+            hyperion-webos-qt6-full.ipk
             release/
