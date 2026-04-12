@@ -57,9 +57,9 @@ jobs:
 # =========================================================
 # QT6 SOURCE (CRITICAL FIX: FULL INIT)
 # =========================================================
-      - name: Fetch Qt6 source
+      - name: Fetch Qt6 source (FIXED)
         run: |
-          git clone https://code.qt.io/qt/qt6.git qt6
+          git clone https://code.qt.io/qt/qt5.git qt6
           cd qt6
           git checkout v${QT_VERSION}
           perl init-repository
