@@ -1,4 +1,4 @@
-name: Hyperion webOS Qt6 FINAL CI
+name: Hyperion webOS Qt6
 
 on:
   push:
@@ -19,19 +19,22 @@ env:
 
 jobs:
 
-# =========================================================
-# TOOLCHAIN
-# =========================================================
   build:
     runs-on: ubuntu-22.04
 
     steps:
+      # ---------------------------------------------------
+      # Checkout Hyperion
+      # ---------------------------------------------------
       - name: Checkout Hyperion
         uses: actions/checkout@v4
         with:
           repository: hyperion-project/hyperion.ng
           submodules: recursive
 
+      # ---------------------------------------------------
+      # Dependencies
+      # ---------------------------------------------------
       - name: Install dependencies
         run: |
           sudo apt update
@@ -39,9 +42,9 @@ jobs:
             build-essential cmake ninja-build git perl python3 pkg-config ccache \
             libegl1-mesa-dev libgles2-mesa-dev
 
-      # -----------------------------------------------------
-      # TOOLCHAIN CACHE
-      # -----------------------------------------------------
+      # ---------------------------------------------------
+      # Toolchain
+      # ---------------------------------------------------
       - name: Cache toolchain
         id: cache-toolchain
         uses: actions/cache@v4
@@ -59,13 +62,9 @@ jobs:
           cd ${TOOLCHAIN_DIR}
           sudo ./relocate-sdk.sh
 
-      - name: Fix toolchain
-        run: |
-          find ${TOOLCHAIN_DIR}/bin -iname "perl*" -delete
-
-# =========================================================
-# BUILD QT6 (WEBOS)
-# =========================================================
+      # ---------------------------------------------------
+      # Qt6 BUILD (CMake ONLY - STABLE)
+      # ---------------------------------------------------
       - name: Build Qt6
         run: |
           source ${TOOLCHAIN_ENV_FILE}
@@ -75,28 +74,36 @@ jobs:
           git checkout v6.8.3
           perl init-repository --module-subset=qtbase
 
-          mkdir build && cd build
+          mkdir build
+          cd build
 
-          ../qtbase/configure \
-            -release \
-            -prefix ${QT_PREFIX} \
-            -sysroot ${SYSROOT} \
-            -platform linux-g++ \
-            -device linux-webos-g++ \
-            -device-option CROSS_COMPILE=${TOOLCHAIN_DIR}/bin/arm-webos-linux-gnueabi- \
-            -opengl es2 \
-            -gui -widgets -network -sql-sqlite \
-            -no-dbus -no-icu \
-            -nomake tests -nomake examples \
-            -qt-host-path /opt/qt6-host \
-            -- -DCMAKE_TOOLCHAIN_FILE=${TOOLCHAIN_FILE}
+          cmake ../qtbase \
+            -GNinja \
+            -DCMAKE_TOOLCHAIN_FILE=${TOOLCHAIN_FILE} \
+            -DCMAKE_INSTALL_PREFIX=${QT_PREFIX} \
+            -DCMAKE_BUILD_TYPE=Release \
+            \
+            -DQT_BUILD_EXAMPLES=OFF \
+            -DQT_BUILD_TESTS=OFF \
+            \
+            -DQT_FEATURE_gui=ON \
+            -DQT_FEATURE_widgets=ON \
+            -DQT_FEATURE_network=ON \
+            -DQT_FEATURE_sql=ON \
+            \
+            -DQT_FEATURE_opengl=es2 \
+            -DQT_FEATURE_egl=ON \
+            \
+            -DQT_FEATURE_dbus=OFF \
+            -DQT_FEATURE_icu=OFF \
+            -DCMAKE_SKIP_RPATH=ON
 
           cmake --build . --parallel
           cmake --install .
 
-# =========================================================
-# BUILD HYPERION
-# =========================================================
+      # ---------------------------------------------------
+      # Hyperion Build
+      # ---------------------------------------------------
       - name: Build Hyperion
         run: |
           source ${TOOLCHAIN_ENV_FILE}
@@ -118,10 +125,10 @@ jobs:
 
           cmake --build .
 
-# =========================================================
-# RUNTIME PREPARATION (IMPORTANT FIXES)
-# =========================================================
-      - name: Prepare release folder
+      # ---------------------------------------------------
+      # RUNTIME PACKAGE FIX (CRITICAL FOR WEBOS)
+      # ---------------------------------------------------
+      - name: Prepare release
         run: |
           rm -rf ${RELEASE_DIR}
           mkdir -p ${RELEASE_DIR}
@@ -134,33 +141,33 @@ jobs:
           cp ${QT_PREFIX}/lib/libQt6Network.so* ${RELEASE_DIR}/
           cp ${QT_PREFIX}/lib/libQt6Widgets.so* ${RELEASE_DIR}/
 
-          # Qt6 plugins (CRITICAL FIX)
+          # Qt6 plugins (FIX FOR CRASHES)
           mkdir -p ${RELEASE_DIR}/plugins/{platforms,imageformats,sqldrivers}
 
           cp ${QT_PREFIX}/plugins/platforms/libqlinuxfb.so ${RELEASE_DIR}/plugins/platforms/ || true
           cp ${QT_PREFIX}/plugins/imageformats/libqjpeg.so ${RELEASE_DIR}/plugins/imageformats/ || true
           cp ${QT_PREFIX}/plugins/sqldrivers/libqsqlite.so ${RELEASE_DIR}/plugins/sqldrivers/ || true
 
-# =========================================================
-# AUTOSTART SCRIPT (WEBOS FIX)
-# =========================================================
-      - name: Create autostart script
+      # ---------------------------------------------------
+      # AUTOSTART SCRIPT (WEBOS FIX)
+      # ---------------------------------------------------
+      - name: Create autostart
         run: |
           cat <<EOF > ${RELEASE_DIR}/start_hyperiond.sh
           #!/bin/sh
 
           export LD_LIBRARY_PATH=\$(dirname \$0)
-          export QT_QPA_PLATFORM=linuxfb
           export QT_PLUGIN_PATH=\$(dirname \$0)/plugins
+          export QT_QPA_PLATFORM=linuxfb
 
           exec \$(dirname \$0)/hyperiond
           EOF
 
           chmod +x ${RELEASE_DIR}/start_hyperiond.sh
 
-# =========================================================
-# IPK PACKAGING
-# =========================================================
+      # ---------------------------------------------------
+      # IPK PACKAGE
+      # ---------------------------------------------------
       - name: Create IPK
         run: |
           mkdir -p ipk/CONTROL
@@ -173,18 +180,18 @@ jobs:
           Version: 1.0.0
           Architecture: armv7
           Maintainer: Hyperion Project
-          Description: Hyperion NG Qt6 for webOS
+          Description: Hyperion NG Qt6 webOS build
           EOF
 
-          dpkg-deb --build ipk hyperion-webos.ipk
+          dpkg-deb --build ipk hyperion-webos-qt6.ipk
 
-# =========================================================
-# ARTIFACTS
-# =========================================================
-      - name: Upload build
+      # ---------------------------------------------------
+      # ARTIFACT
+      # ---------------------------------------------------
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: hyperion-webos-qt6
+          name: hyperion-webos-qt6-final
           path: |
-            hyperion-webos.ipk
+            hyperion-webos-qt6.ipk
             release/
