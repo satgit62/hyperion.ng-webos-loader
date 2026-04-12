@@ -1,4 +1,5 @@
-name: WebOS build
+name: Hyperion webOS Qt6 FINAL CI
+
 on:
   push:
   pull_request:
@@ -9,238 +10,181 @@ env:
   TOOLCHAIN_DIR: /opt/arm-webos-linux-gnueabi_sdk-buildroot
   TOOLCHAIN_ENV_FILE: /opt/arm-webos-linux-gnueabi_sdk-buildroot/environment-setup
   TOOLCHAIN_FILE: /opt/arm-webos-linux-gnueabi_sdk-buildroot/share/buildroot/toolchainfile.cmake
-  QT_DIR: /opt/qt_build
+
+  SYSROOT: /opt/arm-webos-linux-gnueabi_sdk-buildroot/arm-webos-linux-gnueabi/sysroot
+  QT_PREFIX: /opt/arm-webos-linux-gnueabi_sdk-buildroot/arm-webos-linux-gnueabi/sysroot/usr/local/qt6
+
   BUILD_DIR: build
-
-  CCACHE_CACHE_DIR: .ccache-build
-  CCACHE_COMPRESS: true
-  CCACHE_COMPRESSLEVEL: 6
-  CCACHE_MAXSIZE: 600M
-
-  QT_VERSION: "6.8.3"
-
+  RELEASE_DIR: release
 
 jobs:
-  build_hyperion_ng:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./hyperion.ng
+
+# =========================================================
+# TOOLCHAIN
+# =========================================================
+  build:
+    runs-on: ubuntu-22.04
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout Hyperion
+        uses: actions/checkout@v4
         with:
           repository: hyperion-project/hyperion.ng
-          ref: master
-          path: hyperion.ng
           submodules: recursive
-          fetch-depth: 0
 
-      - name: Restore/Cache build directories
-        uses: actions/cache@v3
-        with:
-          path: ${{ github.workspace }}/${{ env.CCACHE_CACHE_DIR }}
-          key: ccache-${{ runner.os }}-${{github.run_id}}
-          restore-keys: |
-            ccache-${{ runner.os }}
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y \
+            build-essential cmake ninja-build git perl python3 pkg-config ccache \
+            libegl1-mesa-dev libgles2-mesa-dev
 
-      - name: Restore/Cache toolchain dir
+      # -----------------------------------------------------
+      # TOOLCHAIN CACHE
+      # -----------------------------------------------------
+      - name: Cache toolchain
         id: cache-toolchain
         uses: actions/cache@v4
         with:
-          path: |
-            ${{ env.TOOLCHAIN_DIR }}
-            ${{ env.QT_DIR }}
+          path: ${{ env.TOOLCHAIN_DIR }}
+          key: webos-toolchain
 
-          key: ${{ runner.os }}-${{ env.TOOLCHAIN_URL }}
-
-      - name: Create build directories
-        run: |
-          mkdir -p ./${{ env.BUILD_DIR }}
-
-      - name: Download and unpack toolchain
-        if: steps.cache-toolchain.outputs.cache-hit != 'true'
-        working-directory: /opt
-        run: |
-          wget -q -O toolchain.tar.gz ${TOOLCHAIN_URL}
-          tar xf toolchain.tar.gz
-
-      - name: Relocate toolchain
-        run: |
-          pushd ${TOOLCHAIN_DIR}
-          ./relocate-sdk.sh
-          popd
-
-      - name: Fix toolchain (remove perl)
-        run: |
-          find ${TOOLCHAIN_DIR}/bin -type f -iname "perl*" -delete
-
-      - name: Set up host QT Toolchain path
-        run: |
-          echo "QT_TOOLCHAIN_DIR=$TOOLCHAIN_DIR/qt6-host" >> $GITHUB_ENV
-          echo "SYSROOT=$TOOLCHAIN_DIR/arm-webos-linux-gnueabi/sysroot" >> $GITHUB_ENV
-
-      - name: Install native dependencies
-        env:
-          apt_deps: ccache git cmake build-essential flatbuffers-compiler
-        run: |
-          sudo apt update
-          sudo apt install -y ${{ env.apt_deps }}
-
-      - name: "Build QT: Core, Gui, Network, Sql und Widgets"
+      - name: Download toolchain
         if: steps.cache-toolchain.outputs.cache-hit != 'true'
         run: |
-          mkdir -p ${QT_DIR}
-          git clone --branch v${QT_VERSION} https://github.com/qt/qtbase.git ${QT_DIR}/qt_source
+          sudo mkdir -p /opt
+          cd /opt
+          wget -q -O toolchain.tar.gz "${TOOLCHAIN_URL}"
+          sudo tar xf toolchain.tar.gz
+          cd ${TOOLCHAIN_DIR}
+          sudo ./relocate-sdk.sh
 
-          echo "========================== BUILDING QTBASE (HOST) ============================"
-          mkdir -p ${QT_DIR}/host
-          cd ${QT_DIR}/host
+      - name: Fix toolchain
+        run: |
+          find ${TOOLCHAIN_DIR}/bin -iname "perl*" -delete
 
-          ../qt_source/configure \
-              -prefix $QT_TOOLCHAIN_DIR \
-              -nomake tests -nomake examples \
-              -no-dbus -no-gui -no-widgets -no-sql-sqlite -no-icu -no-feature-network \
-              -no-opengl
+# =========================================================
+# BUILD QT6 (WEBOS)
+# =========================================================
+      - name: Build Qt6
+        run: |
+          source ${TOOLCHAIN_ENV_FILE}
 
-          echo "----------------- BUILD (HOST) ------------------"
+          git clone https://code.qt.io/qt/qt5.git qt6
+          cd qt6
+          git checkout v6.8.3
+          perl init-repository --module-subset=qtbase
+
+          mkdir build && cd build
+
+          ../qtbase/configure \
+            -release \
+            -prefix ${QT_PREFIX} \
+            -sysroot ${SYSROOT} \
+            -platform linux-g++ \
+            -device linux-webos-g++ \
+            -device-option CROSS_COMPILE=${TOOLCHAIN_DIR}/bin/arm-webos-linux-gnueabi- \
+            -opengl es2 \
+            -gui -widgets -network -sql-sqlite \
+            -no-dbus -no-icu \
+            -nomake tests -nomake examples \
+            -qt-host-path /opt/qt6-host \
+            -- -DCMAKE_TOOLCHAIN_FILE=${TOOLCHAIN_FILE}
+
           cmake --build . --parallel
           cmake --install .
 
-          echo "------------------ HOST FILES ------------------"
-          ls $QT_TOOLCHAIN_DIR
-
-          echo "========================== BUILDING QTBASE (CROSS) ============================"
-          mkdir -p ${QT_DIR}/base
-          cd ${QT_DIR}/base
-
-          rm -rf ${TOOLCHAIN_DIR}/arm-webos-linux-gnueabi/sysroot/usr/local/qt6
-
-          rm -rf ${QT_DIR}/qt_source/mkspecs/devices/linux-webos-g++
-          mkdir -p ${QT_DIR}/qt_source/mkspecs/devices/linux-webos-g++
-
-          cp -r $TOOLCHAIN_DIR/mkspecs/devices/linux-buildroot-g++ ${QT_DIR}/qt_source/mkspecs/devices/linux-webos-g++
-
-          mv "${QT_DIR}/qt_source/src/corelib/io/forkfd_qt.c" "${QT_DIR}/qt_source/src/corelib/io/forkfd_qt.cpp"
-          sed -i 's/forkfd_qt\.c/forkfd_qt.cpp/' "${QT_DIR}/qt_source/src/corelib/CMakeLists.txt"
-          sed -i 's/readOnly = (statfs_buf.f_flags & ST_RDONLY) != 0;/readOnly = false;/' ${QT_DIR}/qt_source/src/corelib/io/qstorageinfo_linux.cpp
-
-          printf '\n# --- WebOS lean build adjustments for Qt6 ---\n' >> "${TOOLCHAIN_FILE}"
-          printf 'message(STATUS "Disabling RPATH for lean WebOS build")\n' >> "${TOOLCHAIN_FILE}"
-          printf 'set(CMAKE_SKIP_RPATH TRUE)\n' >> "${TOOLCHAIN_FILE}"
-          printf 'set(CMAKE_BUILD_WITH_INSTALL_RPATH FALSE)\n' >> "${TOOLCHAIN_FILE}"
-          sed -i '1i#define EM_AARCH64 183' ${QT_DIR}/qt_source/src/corelib/plugin/qelfparser_p.cpp
-
-          ../qt_source/configure \
-              -prefix $SYSROOT/usr/local/qt6 \
-              -release \
-              -platform linux-g++ \
-              -device linux-webos-g++ \
-              -device-option CROSS_COMPILE=$TOOLCHAIN_DIR/bin/arm-webos-linux-gnueabi- \
-              -qt-host-path ${QT_TOOLCHAIN_DIR} \
-              -no-dbus -no-icu \
-              -nomake tests -nomake examples \
-              -- -DCMAKE_TOOLCHAIN_FILE=${TOOLCHAIN_FILE} \
-              -DQt6CoreTools_DIR=$QT_TOOLCHAIN_DIR/lib/cmake/Qt6CoreTools \
-              -DQt6WidgetsTools_DIR=$QT_TOOLCHAIN_DIR/lib/cmake/Qt6WidgetsTools \
-              -DQt6GuiTools_DIR=$QT_TOOLCHAIN_DIR/lib/cmake/Qt6GuiTools
-
-          echo "---------------- SUMMARY (ARM) -----------------"
-          cat CMakeCache.txt | grep -E "CMAKE_CXX_COMPILER|CMAKE_TOOLCHAIN_FILE|CMAKE_INSTALL_PREFIX|CMAKE_SYSTEM_NAME" || true
-
-          echo "----------------- BUILD (ARM) ------------------"
-          cmake --build . --parallel
-          cmake --install .
-
-          echo "------------------ ARCH TEST -------------------"
-          file $SYSROOT/usr/local/qt6/lib/libQt6Core.so*
-          file $SYSROOT/usr/local/qt6/lib/libQt6Network.so*
-
-          echo "========================== BUILDING QTSERIALPORT (CROSS) ============================"
-          mkdir -p ${QT_DIR}
-
-          git clone --branch v${QT_VERSION} https://github.com/qt/qtserialport.git ${QT_DIR}/qtserialport
-          mkdir -p ${QT_DIR}/qtserialport/build
-          cd ${QT_DIR}/qtserialport/build
-          cmake -DCMAKE_BUILD_TYPE=Release \
-                -DCMAKE_TOOLCHAIN_FILE="${TOOLCHAIN_FILE}" \
-                -DQT_HOST_PATH="${QT_TOOLCHAIN_DIR}" \
-                -DCMAKE_PREFIX_PATH="$SYSROOT/usr/local/qt6/lib/cmake" \
-                -DCMAKE_INSTALL_PREFIX="$SYSROOT/usr/local/qt6" ..
-
-          echo "---------------- SUMMARY (ARM) -----------------"
-          cat CMakeCache.txt | grep -E "CMAKE_CXX_COMPILER|CMAKE_TOOLCHAIN_FILE|CMAKE_INSTALL_PREFIX|CMAKE_SYSTEM_NAME" || true
-
-          echo "----------------- BUILD (ARM) ------------------"
-          cmake --build . --parallel --verbose
-          cmake --install .
-
-          echo "------------------ ARCH TEST -------------------"
-          file ${TOOLCHAIN_DIR}/arm-webos-linux-gnueabi/sysroot/usr/local/qt6/lib/libQt6SerialPort.so*
-
-
-      - name: Build
-        env:
-          CCACHE_DIR: ${{ github.workspace }}/${{ env.CCACHE_DIR }}
+# =========================================================
+# BUILD HYPERION
+# =========================================================
+      - name: Build Hyperion
         run: |
-          mkdir -p -- "./${{ env.BUILD_DIR }}"
-          pushd -- "./${{ env.BUILD_DIR }}"
+          source ${TOOLCHAIN_ENV_FILE}
+
+          mkdir -p ${BUILD_DIR}
+          cd ${BUILD_DIR}
+
           cmake .. \
+            -DCMAKE_TOOLCHAIN_FILE=${TOOLCHAIN_FILE} \
+            -DCMAKE_PREFIX_PATH=${QT_PREFIX} \
+            -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
-            -DCMAKE_TOOLCHAIN_FILE="${TOOLCHAIN_FILE}" \
-            -DPython3_EXECUTABLE="${TOOLCHAIN_DIR}/bin/python3" \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DQt6_DIR=${TOOLCHAIN_DIR}/arm-webos-linux-gnueabi/sysroot/usr/local/qt6/lib/cmake/Qt6 \
-            -DQt6HostInfo_DIR=$QT_TOOLCHAIN_DIR/lib/cmake/Qt6HostInfo \
-            -DQt6CoreTools_DIR=$QT_TOOLCHAIN_DIR/lib/cmake/Qt6CoreTools \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DPLATFORM=rpi \
-            -DENABLE_DEV_FTDI=ON \
-            -DHYPERION_LIGHT=ON \
-            -DENABLE_REMOTE_CTL=ON \
-            -DENABLE_QT=OFF \
-            -DENABLE_AUDIO=OFF \
+            -DPython3_EXECUTABLE=${TOOLCHAIN_DIR}/bin/python3 \
+            -DENABLE_QT=ON \
             -DENABLE_EFFECTENGINE=ON \
-            -DENABLE_JSONCHECKS=ON \
-            -DENABLE_DEV_SERIAL=ON \
-            -DENABLE_DEV_USB_HID=ON \
-            -DENABLE_DEV_WS281XPWM=OFF \
-            -DENABLE_DEV_TINKERFORGE=ON \
-            -DENABLE_MDNS=ON \
-            -DENABLE_DEPLOY_DEPENDENCIES=OFF \
-            -DENABLE_BOBLIGHT_SERVER=ON \
-            -DENABLE_FLATBUF_SERVER=ON \
-            -DENABLE_PROTOBUF_SERVER=OFF \
-            -DENABLE_FORWARDER=ON \
-            -DENABLE_FLATBUF_CONNECT=ON \
-          make
-          popd
+            -DENABLE_AUDIO=OFF \
+            -G Ninja
 
-      - name: Copy built binaries to release/
+          cmake --build .
+
+# =========================================================
+# RUNTIME PREPARATION (IMPORTANT FIXES)
+# =========================================================
+      - name: Prepare release folder
         run: |
-          rm -rf ./release
-          cp -r -T -- "./${{ env.BUILD_DIR }}/bin" ./release
-          find ./release
+          rm -rf ${RELEASE_DIR}
+          mkdir -p ${RELEASE_DIR}
 
-      - name: Copy dependencies to release/
-        env:
-          dependency_libs: libpython3.10.so.1.0 libQt6Core.so.6 libQt6Network.so.6 libQt6SerialPort.so.6 libpng16.so.16 libjpeg.so.8 libcrypt.so.1 libcrypto.so.1.1 libz.so.1 libssl.so.1.1 libpcre2-16.so.0 libQt6Gui.so.6 libQt6Widgets.so.6 libk5crypto.so.3 libatomic.so.1 libkrb5support.so.0 libcom_err.so.3 libstdc++.so.6 libkrb5.so.3 libQt6Sql.so.6 libgssapi_krb5.so.2 libQt6WebSockets.so.6 libusb-1.0.so.0 libftdi1.so.2 libudev.so.1
+          cp ${BUILD_DIR}/bin/* ${RELEASE_DIR}/
 
+          # Qt6 libs
+          cp ${QT_PREFIX}/lib/libQt6Core.so* ${RELEASE_DIR}/
+          cp ${QT_PREFIX}/lib/libQt6Gui.so* ${RELEASE_DIR}/
+          cp ${QT_PREFIX}/lib/libQt6Network.so* ${RELEASE_DIR}/
+          cp ${QT_PREFIX}/lib/libQt6Widgets.so* ${RELEASE_DIR}/
+
+          # Qt6 plugins (CRITICAL FIX)
+          mkdir -p ${RELEASE_DIR}/plugins/{platforms,imageformats,sqldrivers}
+
+          cp ${QT_PREFIX}/plugins/platforms/libqlinuxfb.so ${RELEASE_DIR}/plugins/platforms/ || true
+          cp ${QT_PREFIX}/plugins/imageformats/libqjpeg.so ${RELEASE_DIR}/plugins/imageformats/ || true
+          cp ${QT_PREFIX}/plugins/sqldrivers/libqsqlite.so ${RELEASE_DIR}/plugins/sqldrivers/ || true
+
+# =========================================================
+# AUTOSTART SCRIPT (WEBOS FIX)
+# =========================================================
+      - name: Create autostart script
         run: |
-          for i in ${{ env.dependency_libs }}; do find -- "${TOOLCHAIN_DIR}/arm-webos-linux-gnueabi/sysroot/" -name "${i}" -exec cp -t ./release -- {} \;; done
-          mkdir -p ./release/sqldrivers
-          mkdir -p ./release/imageformats
-          mkdir -p ./release/python/lib
-          cp -t ./release/sqldrivers -- "${TOOLCHAIN_DIR}/arm-webos-linux-gnueabi/sysroot/usr/lib/qt/plugins/sqldrivers/libqsqlite.so"
-          cp -t ./release/imageformats -- "${TOOLCHAIN_DIR}/arm-webos-linux-gnueabi/sysroot/usr/lib/qt/plugins/imageformats/libqico.so"
-          cp -t ./release/imageformats -- "${TOOLCHAIN_DIR}/arm-webos-linux-gnueabi/sysroot/usr/lib/qt/plugins/imageformats/libqjpeg.so"
-          cp -r -t ./release/python/lib -- "${TOOLCHAIN_DIR}/arm-webos-linux-gnueabi/sysroot/usr/lib/python3.10"
-          find ./release
+          cat <<EOF > ${RELEASE_DIR}/start_hyperiond.sh
+          #!/bin/sh
 
-      - name: Upload artifacts
+          export LD_LIBRARY_PATH=\$(dirname \$0)
+          export QT_QPA_PLATFORM=linuxfb
+          export QT_PLUGIN_PATH=\$(dirname \$0)/plugins
+
+          exec \$(dirname \$0)/hyperiond
+          EOF
+
+          chmod +x ${RELEASE_DIR}/start_hyperiond.sh
+
+# =========================================================
+# IPK PACKAGING
+# =========================================================
+      - name: Create IPK
+        run: |
+          mkdir -p ipk/CONTROL
+          mkdir -p ipk/usr/bin/hyperion
+
+          cp -r ${RELEASE_DIR}/* ipk/usr/bin/hyperion/
+
+          cat <<EOF > ipk/CONTROL/control
+          Package: hyperion
+          Version: 1.0.0
+          Architecture: armv7
+          Maintainer: Hyperion Project
+          Description: Hyperion NG Qt6 for webOS
+          EOF
+
+          dpkg-deb --build ipk hyperion-webos.ipk
+
+# =========================================================
+# ARTIFACTS
+# =========================================================
+      - name: Upload build
         uses: actions/upload-artifact@v4
         with:
-          name: hyperion.ng-build
-          path: ${{ github.workspace }}/hyperion.ng/release/*
-          if-no-files-found: error
+          name: hyperion-webos-qt6
+          path: |
+            hyperion-webos.ipk
+            release/
