@@ -71,7 +71,6 @@ jobs:
           key: toolchain-${{ runner.os }}-${{ env.TOOLCHAIN_REVISION }}
 
 
-jobs:
   build_hyperion_ng:
     runs-on: ubuntu-latest
     defaults:
