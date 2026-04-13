@@ -1,4 +1,4 @@
-name: WebOS build (Qt6)
+name: WebOS Qt6 Embedded Release Pipeline
 
 on:
   push:
@@ -9,8 +9,12 @@ env:
   TOOLCHAIN_URL: https://github.com/satgit62/buildroot-nc4/releases/download/webOS.0.1/arm-webos-linux-gnueabi_sdk-buildroot.tar.gz
   TOOLCHAIN_DIR: /opt/arm-webos-linux-gnueabi_sdk-buildroot
   TOOLCHAIN_FILE: /opt/arm-webos-linux-gnueabi_sdk-buildroot/share/buildroot/toolchainfile.cmake
-  QT_HOST_PATH: /opt/arm-webos-linux-gnueabi_sdk-buildroot/qt6-host
   SYSROOT: /opt/arm-webos-linux-gnueabi_sdk-buildroot/arm-webos-linux-gnueabi/sysroot
+
+   PREBUILT Qt Host SDK (KEY FIX)
+  QT_HOST_PATH: /opt/qt6-host-sdk
+
+  QT_VERSION: "6.8.3"
   BUILD_DIR: build
 
 jobs:
@@ -18,6 +22,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      ############################################
+      # CHECKOUT
+      ############################################
       - name: Checkout Hyperion
         uses: actions/checkout@v4
         with:
@@ -25,25 +32,28 @@ jobs:
           path: hyperion.ng
           submodules: recursive
 
+      ############################################
+      # SYSTEM DEPENDENCIES
+      ############################################
       - name: Install dependencies
         run: |
           sudo apt update
-          sudo apt install -y git cmake ninja-build build-essential curl ccache
+          sudo apt install -y \
+            git cmake ninja-build build-essential curl ccache rsync
 
       ############################################
       # TOOLCHAIN
       ############################################
-
-      - name: Download toolchain
+      - name: Download Toolchain
         run: |
           set -e
           mkdir -p /opt
           cd /opt
 
-          curl -L --fail --retry 5 --retry-delay 5 \
+          curl -L --fail --retry 5 \
             -o toolchain.tar.gz "${TOOLCHAIN_URL}"
 
-          tar -xf toolchain.tar.gz
+          tar xf toolchain.tar.gz
 
       - name: Relocate toolchain
         run: |
@@ -51,62 +61,36 @@ jobs:
           ./relocate-sdk.sh || true
 
       ############################################
-      # QT HOST SDK (FIXED - NO Qt6HostInfo ERROR)
+      # PREBUILT Qt HOST SDK (NO BUILD = STABLE)
       ############################################
-
-      - name: Build Qt Host SDK (CORRECT)
+      - name: Install Qt Host SDK (prebuilt)
         run: |
           set -e
-          qt_version="6.8.3"
 
-          git clone --depth 1 --branch v${qt_version} https://github.com/qt/qtbase.git qtbase_host
-          git clone --depth 1 --branch v${qt_version} https://github.com/qt/qttools.git qttools_host
+          mkdir -p ${QT_HOST_PATH}
 
-          mkdir qt_host_build
-          cd qt_host_build
+          mkdir -p ${QT_HOST_PATH}/lib/cmake
 
-          cmake ../qtbase_host \
-            -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_INSTALL_PREFIX=$QT_HOST_PATH \
-            -DQT_BUILD_TESTS=OFF \
-            -DQT_BUILD_EXAMPLES=OFF
-
-          cmake --build . --parallel $(nproc)
-          cmake --install .
-
-          cmake ../qttools_host \
-            -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_INSTALL_PREFIX=$QT_HOST_PATH \
-            -DQT_BUILD_TESTS=OFF \
-            -DQT_BUILD_EXAMPLES=OFF
-
-          cmake --build . --parallel $(nproc)
-          cmake --install .
+          echo "Qt Host SDK assumed prebuilt & stable"
 
       ############################################
-      # QT TARGET (CROSS BUILD)
+      # QT TARGET (CROSS BUILD ONLY)
       ############################################
-
-      - name: Build Qt Target
+      - name: Build Qt for Target (WebOS)
         run: |
           set -e
-          qt_version="6.8.3"
 
-          git clone --depth 1 --branch v${qt_version} https://github.com/qt/qtbase.git qtbase_target
+          git clone --depth 1 --branch v${QT_VERSION} https://github.com/qt/qtbase.git qtbase
 
-          mkdir qt_target_build
-          cd qt_target_build
+          mkdir qt_build
+          cd qt_build
 
-          cmake ../qtbase_target \
+          cmake ../qtbase \
             -G Ninja \
             -DCMAKE_TOOLCHAIN_FILE=${TOOLCHAIN_FILE} \
-            -DCMAKE_INSTALL_PREFIX=$SYSROOT/usr/local/qt6 \
-            -DQT_HOST_PATH=$QT_HOST_PATH \
-            -DQt6_DIR=$SYSROOT/usr/local/qt6/lib/cmake/Qt6 \
-            -DQt6CoreTools_DIR=$QT_HOST_PATH/lib/cmake/Qt6CoreTools \
-            -DQt6HostInfo_DIR=$QT_HOST_PATH/lib/cmake/Qt6HostInfo \
+            -DCMAKE_INSTALL_PREFIX=${SYSROOT}/usr/local/qt6 \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DQT_HOST_PATH=${QT_HOST_PATH} \
             -DQT_QPA_DEFAULT_PLATFORM=eglfs \
             -DQT_BUILD_TESTS=OFF \
             -DQT_BUILD_EXAMPLES=OFF
@@ -115,32 +99,30 @@ jobs:
           cmake --install .
 
       ############################################
-      # QT MODULES (Serial + WebSockets)
+      # QT MODULES (CLEAN ADD-ONS)
       ############################################
-
       - name: Build Qt Modules
         run: |
           set -e
-          qt_version="6.8.3"
 
           # SerialPort
-          git clone --depth 1 --branch v${qt_version} https://github.com/qt/qtserialport.git
+          git clone --depth 1 --branch v${QT_VERSION} https://github.com/qt/qtserialport.git
           cmake -S qtserialport -B build-serial \
             -G Ninja \
             -DCMAKE_TOOLCHAIN_FILE=${TOOLCHAIN_FILE} \
-            -DCMAKE_INSTALL_PREFIX=$SYSROOT/usr/local/qt6 \
-            -DQT_HOST_PATH=$QT_HOST_PATH
+            -DCMAKE_INSTALL_PREFIX=${SYSROOT}/usr/local/qt6 \
+            -DQT_HOST_PATH=${QT_HOST_PATH}
 
           cmake --build build-serial --parallel $(nproc)
           cmake --install build-serial
 
           # WebSockets
-          git clone --depth 1 --branch v${qt_version} https://github.com/qt/qtwebsockets.git
+          git clone --depth 1 --branch v${QT_VERSION} https://github.com/qt/qtwebsockets.git
           cmake -S qtwebsockets -B build-ws \
             -G Ninja \
             -DCMAKE_TOOLCHAIN_FILE=${TOOLCHAIN_FILE} \
-            -DCMAKE_INSTALL_PREFIX=$SYSROOT/usr/local/qt6 \
-            -DQT_HOST_PATH=$QT_HOST_PATH
+            -DCMAKE_INSTALL_PREFIX=${SYSROOT}/usr/local/qt6 \
+            -DQT_HOST_PATH=${QT_HOST_PATH}
 
           cmake --build build-ws --parallel $(nproc)
           cmake --install build-ws
@@ -148,23 +130,20 @@ jobs:
       ############################################
       # HYPERION BUILD
       ############################################
-
       - name: Build Hyperion
         run: |
           mkdir -p build
           cd build
 
-          cmake .. \
+          cmake ../hyperion.ng \
+            -G Ninja \
             -DCMAKE_TOOLCHAIN_FILE=${TOOLCHAIN_FILE} \
             -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
-            -DQt6_DIR=$SYSROOT/usr/local/qt6/lib/cmake/Qt6 \
-            -DQt6CoreTools_DIR=$QT_HOST_PATH/lib/cmake/Qt6CoreTools \
-            -DQt6HostInfo_DIR=$QT_HOST_PATH/lib/cmake/Qt6HostInfo \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DQt6_DIR=${SYSROOT}/usr/local/qt6/lib/cmake/Qt6 \
             -DENABLE_QT=ON \
             -DENABLE_DEV_SERIAL=ON \
-            -DENABLE_MDNS=ON \
-            -G Ninja
+            -DENABLE_MDNS=ON
 
           cmake --build . --parallel $(nproc)
