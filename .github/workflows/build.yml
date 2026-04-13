@@ -82,14 +82,14 @@ jobs:
           qt_version="6.8.3"
 
           ########################################
-          # HOST QT
+          # HOST QT TOOLS (FIX Qt6HostInfo)
           ########################################
 
-          git clone --depth 1 --branch v${qt_version} https://github.com/qt/qtbase.git qtbase_host
-          mkdir qt_host_build
-          cd qt_host_build
+          git clone --depth 1 --branch v${qt_version} https://github.com/qt/qttools.git qttools_host
+          mkdir qt_tools_build
+          cd qt_tools_build
 
-          cmake ../qtbase_host \
+          cmake ../qttools_host \
             -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_INSTALL_PREFIX=$QT_HOST_PATH \
