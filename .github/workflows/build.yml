@@ -1,4 +1,4 @@
-name: WebOS Qt6 Embedded Deterministic Pipeline
+name: WebOS Qt6 
 
 on:
   push:
@@ -6,115 +6,186 @@ on:
   workflow_dispatch:
 
 env:
+  QT_VERSION: "6.8.3"
+
   TOOLCHAIN_URL: https://github.com/satgit62/buildroot-nc4/releases/download/webOS.0.1/arm-webos-linux-gnueabi_sdk-buildroot.tar.gz
   TOOLCHAIN_DIR: /opt/arm-webos-linux-gnueabi_sdk-buildroot
   TOOLCHAIN_FILE: /opt/arm-webos-linux-gnueabi_sdk-buildroot/share/buildroot/toolchainfile.cmake
 
   SYSROOT: /opt/arm-webos-linux-gnueabi_sdk-buildroot/arm-webos-linux-gnueabi/sysroot
 
-  QT_VERSION: "6.8.3"
-  QT_HOST_DIR: /opt/qt6-host
+  QT_HOST_PREFIX: /opt/qt6-host
 
   BUILD_DIR: build
 
+############################################
+# 🧱 JOB 1: QT HOST SDK (DETERMINISTIC)
+############################################
 jobs:
+  qt-host-sdk:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y git cmake ninja-build build-essential zstd
+
+      - name: Build Qt Host SDK
+        run: |
+          set -e
+
+          git clone --depth 1 --branch v${QT_VERSION} https://github.com/qt/qtbase.git qtbase
+          git clone --depth 1 --branch v${QT_VERSION} https://github.com/qt/qttools.git qttools
+
+          mkdir qt-host-build
+          cd qt-host-build
+
+          cmake ../qtbase \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX=$PWD/qt-host-sdk \
+            -DQT_BUILD_TESTS=OFF \
+            -DQT_BUILD_EXAMPLES=OFF \
+            -DQT_BUILD_TOOLS_BY_DEFAULT=ON
+
+          cmake --build . --parallel $(nproc)
+          cmake --install .
+
+          cd ..
+
+          mkdir qt-tools-build
+          cd qt-tools-build
+
+          cmake ../qttools \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX=$PWD/qt-host-sdk \
+            -DQT_BUILD_TESTS=OFF \
+            -DQT_BUILD_EXAMPLES=OFF
+
+          cmake --build . --parallel $(nproc)
+          cmake --install .
+
+          cd ..
+
+          tar -I 'zstd -19' -cf qt6-host-sdk.tar.zst qt-host-sdk
+
+      - name: Upload Qt Host SDK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: qt6-host-sdk
+          path: qt6-host-sdk.tar.zst
+
+
+############################################
+# 🧱 JOB 2: CROSS BUILD (WEBOS TARGET)
+############################################
   build:
+    needs: qt-host-sdk
     runs-on: ubuntu-latest
 
     steps:
 
-    ############################################
-    # CHECKOUT
-    ############################################
-    - name: Checkout Hyperion
-      uses: actions/checkout@v4
-      with:
-        repository: hyperion-project/hyperion.ng
-        path: hyperion.ng
-        submodules: recursive
+      ############################################
+      # CHECKOUT
+      ############################################
+      - name: Checkout Hyperion
+        uses: actions/checkout@v4
+        with:
+          repository: hyperion-project/hyperion.ng
+          path: hyperion.ng
+          submodules: recursive
 
-    ############################################
-    # SYSTEM DEPENDENCIES
-    ############################################
-    - name: Install dependencies
-      run: |
-        sudo apt update
-        sudo apt install -y \
-          git cmake ninja-build build-essential curl ccache zstd
+      ############################################
+      # DEPENDENCIES
+      ############################################
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y \
+            git cmake ninja-build build-essential curl ccache zstd
 
-    ############################################
-    # TOOLCHAIN
-    ############################################
-    - name: Download Toolchain
-      run: |
-        set -e
-        mkdir -p /opt
-        cd /opt
+      ############################################
+      # TOOLCHAIN
+      ############################################
+      - name: Download Toolchain
+        run: |
+          set -e
+          mkdir -p /opt
+          cd /opt
 
-        curl -L --fail --retry 5 -o toolchain.tar.gz "${TOOLCHAIN_URL}"
-        tar xf toolchain.tar.gz
+          curl -L --fail --retry 5 -o toolchain.tar.gz "${TOOLCHAIN_URL}"
+          tar xf toolchain.tar.gz
 
-    - name: Relocate toolchain
-      run: |
-        cd ${TOOLCHAIN_DIR}
-        ./relocate-sdk.sh || true
+      - name: Relocate toolchain
+        run: |
+          cd ${TOOLCHAIN_DIR}
+          ./relocate-sdk.sh || true
 
-    ############################################
-    # RESTORE Qt HOST SDK (NO BUILD!)
-    ############################################
-    - name: Download Qt6 Host SDK Artifact
-      uses: actions/download-artifact@v4
-      with:
-        name: qt6-host-sdk
-        path: .
+      ############################################
+      # CCACHE
+      ############################################
+      - name: Setup ccache
+        run: |
+          echo "CCACHE_DIR=${{ github.workspace }}/.ccache" >> $GITHUB_ENV
+          echo "CMAKE_C_COMPILER_LAUNCHER=ccache" >> $GITHUB_ENV
+          echo "CMAKE_CXX_COMPILER_LAUNCHER=ccache" >> $GITHUB_ENV
 
-    - name: Extract Qt6 Host SDK
-      run: |
-        set -e
-        mkdir -p ${QT_HOST_DIR}
-        tar -I zstd -xf qt6-host-sdk.tar.zst -C ${QT_HOST_DIR}
-        echo "QT_HOST_PATH=${QT_HOST_DIR}/qt-host-sdk" >> $GITHUB_ENV
+      ############################################
+      # RESTORE QT HOST SDK
+      ############################################
+      - name: Download Qt Host SDK artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: qt6-host-sdk
 
-    ############################################
-    # CROSS BUILD Qt + Hyperion
-    ############################################
-    - name: Build Hyperion (WebOS Qt6)
-      run: |
-        set -e
+      - name: Extract Qt Host SDK
+        run: |
+          set -e
+          mkdir -p ${QT_HOST_PREFIX}
+          tar -I zstd -xf qt6-host-sdk.tar.zst -C ${QT_HOST_PREFIX}
 
-        mkdir -p ${BUILD_DIR}
-        cd ${BUILD_DIR}
+          echo "QT_HOST_PATH=${QT_HOST_PREFIX}/qt-host-sdk" >> $GITHUB_ENV
 
-        cmake ../hyperion.ng \
-          -G Ninja \
-          -DCMAKE_TOOLCHAIN_FILE=${TOOLCHAIN_FILE} \
-          -DCMAKE_BUILD_TYPE=Release \
-          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
-          -DCMAKE_C_COMPILER_LAUNCHER=ccache \
-          -DQt6_DIR=${SYSROOT}/usr/local/qt6/lib/cmake/Qt6 \
-          -DQT_HOST_PATH=${QT_HOST_PATH} \
-          -DENABLE_QT=ON \
-          -DENABLE_DEV_SERIAL=ON \
-          -DENABLE_MDNS=ON \
-          -DENABLE_EFFECTENGINE=ON
+      ############################################
+      # CROSS BUILD HYPERION
+      ############################################
+      - name: Build Hyperion (Qt6 WebOS)
+        run: |
+          set -e
 
-        cmake --build . --parallel $(nproc)
+          mkdir -p ${BUILD_DIR}
+          cd ${BUILD_DIR}
 
-    ############################################
-    # PACKAGE ARTIFACT
-    ############################################
-    - name: Package release
-      run: |
-        rm -rf release
-        mkdir -p release
+          cmake ../hyperion.ng \
+            -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE=${TOOLCHAIN_FILE} \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DQt6_DIR=${SYSROOT}/usr/local/qt6/lib/cmake/Qt6 \
+            -DQT_HOST_PATH=${QT_HOST_PATH} \
+            -DENABLE_QT=ON \
+            -DENABLE_DEV_SERIAL=ON \
+            -DENABLE_DEV_USB_HID=ON \
+            -DENABLE_MDNS=ON \
+            -DENABLE_EFFECTENGINE=ON \
+            -DENABLE_WEBOS=ON
 
-        cp -r ${BUILD_DIR}/bin/* release/ || true
+          cmake --build . --parallel $(nproc)
 
-    ############################################
-    # UPLOAD ARTIFACT
-    ############################################
-    - name: Upload build artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: hyperion-webos-build
-        path: release
+      ############################################
+      # ARTIFACT OUTPUT
+      ############################################
+      - name: Package release
+        run: |
+          rm -rf release
+          mkdir -p release
+          cp -r ${BUILD_DIR}/bin/* release/ || true
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: hyperion-webos-release
+          path: release
