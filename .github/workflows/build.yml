@@ -1,3 +1,4 @@
+```yaml
 name: WebOS build
 on:
   push:
@@ -36,7 +37,7 @@ jobs:
       - name: Restore/Cache build directories
         uses: actions/cache@v3
         with:
-          path: ${{ github.workspace }}/${{ env.CCACHE_CACHE_DIR }}
+          path: ${{ github.workspace }}/${{ env.CCACHE_DIR }}
           key: ccache-${{ runner.os }}-${{github.run_id}}
           restore-keys: |
             ccache-${{ runner.os }}
@@ -47,13 +48,19 @@ jobs:
         with:
           path: |
             ${{ env.TOOLCHAIN_DIR }}
-            ${{ env.QT_DIR }}
-
           key: ${{ runner.os }}-${{ env.TOOLCHAIN_URL }}
 
+      - name: Cache Qt6 build
+        id: cache-qt
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ env.TOOLCHAIN_DIR }}/arm-webos-linux-gnueabi/sysroot/usr/local/qt6
+            ${{ env.TOOLCHAIN_DIR }}/qt6-host
+          key: qt6-${{ runner.os }}-6.8.3-v1
+
       - name: Create build directories
-        run: |
-          mkdir -p ./${{ env.BUILD_DIR }}
+        run: mkdir -p ./${{ env.BUILD_DIR }}
 
       - name: Download and unpack toolchain
         if: steps.cache-toolchain.outputs.cache-hit != 'true'
@@ -72,57 +79,103 @@ jobs:
         run: |
           find ${TOOLCHAIN_DIR}/bin -type f -iname "perl*" -delete
 
-      - name: Set up host QT Toolchain path
+      - name: Set up Qt + Sysroot paths
         run: |
           echo "QT_TOOLCHAIN_DIR=$TOOLCHAIN_DIR/qt6-host" >> $GITHUB_ENV
           echo "SYSROOT=$TOOLCHAIN_DIR/arm-webos-linux-gnueabi/sysroot" >> $GITHUB_ENV
 
       - name: Install native dependencies
-        env:
-          apt_deps: ccache git cmake build-essential flatbuffers-compiler
         run: |
           sudo apt update
-          sudo apt install -y ${{ env.apt_deps }}
+          sudo apt install -y ccache git cmake build-essential ninja-build flatbuffers-compiler
 
-      - name: "Build QT"
+      ############################################
+      # BUILD QT (CACHED)
+      ############################################
 
+      - name: Build QT
+        if: steps.cache-qt.outputs.cache-hit != 'true'
+        run: |
+          set -e
+
+          qt_version="6.8.3"
+
+          git clone --branch v${qt_version} --depth 1 https://github.com/qt/qtbase.git qt_lts
+          mkdir qt_build
+          cd qt_build
+
+          ../qt_lts/configure \
+            -prefix $SYSROOT/usr/local/qt6 \
+            -extprefix $SYSROOT/usr/local/qt6 \
+            -hostprefix $QT_TOOLCHAIN_DIR \
+            -submodules qtbase,qtnetwork,qtsql,qtwebsockets \
+            -nomake tests \
+            -nomake examples \
+            -no-icu
+
+          cmake --build . --parallel $(nproc)
+          cmake --install .
+
+          ############################################
+          # SERIALPORT
+          ############################################
+
+          rm -rf *
+          git clone --branch v${qt_version} --depth 1 https://github.com/qt/qtserialport.git
+
+          cmake -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE=${TOOLCHAIN_FILE} \
+            -DCMAKE_INSTALL_PREFIX=$SYSROOT/usr/local/qt6 \
+            ./qtserialport
+
+          cmake --build . --parallel $(nproc)
+          cmake --install .
+
+          ############################################
+          # WEBSOCKETS
+          ############################################
+
+          rm -rf *
+          git clone --branch v${qt_version} --depth 1 https://github.com/qt/qtwebsockets.git
+
+          cmake -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE=${TOOLCHAIN_FILE} \
+            -DCMAKE_INSTALL_PREFIX=$SYSROOT/usr/local/qt6 \
+            ./qtwebsockets
+
+          cmake --build . --parallel $(nproc)
+          cmake --install .
+
+          cd ..
+          rm -rf qt_build qt_lts
+
+      ############################################
+      # BUILD PROJECT
+      ############################################
 
       - name: Build (webos arm)
         env:
-          CCACHE_DIR: ${{ github.workspace }}/${{ env.CCACHE_CACHE_DIR }}
+          CCACHE_DIR: ${{ github.workspace }}/${{ env.CCACHE_DIR }}
         run: |
           pushd ./${{ env.BUILD_DIR }}
+
           cmake .. \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
             -DCMAKE_TOOLCHAIN_FILE=${TOOLCHAIN_FILE} \
             -DPython3_EXECUTABLE="${TOOLCHAIN_DIR}/bin/python3" \
-            -DQt6_DIR=${TOOLCHAIN_DIR}/arm-webos-linux-gnueabi/sysroot/usr/local/qt6/lib/cmake/Qt6 \
+            -DQt6_DIR=${SYSROOT}/usr/local/qt6/lib/cmake/Qt6 \
             -DQt6HostInfo_DIR=$QT_TOOLCHAIN_DIR/lib/cmake/Qt6HostInfo \
             -DQt6CoreTools_DIR=$QT_TOOLCHAIN_DIR/lib/cmake/Qt6CoreTools \
             -DCMAKE_BUILD_TYPE=Release \
             -DPLATFORM=rpi \
-            -DENABLE_DEV_FTDI=ON \
-            -DHYPERION_LIGHT=ON \
-            -DENABLE_REMOTE_CTL=ON \
-            -DENABLE_QT=OFF \
-            -DENABLE_AUDIO=OFF \
-            -DENABLE_EFFECTENGINE=ON \
-            -DENABLE_JSONCHECKS=ON \
             -DENABLE_DEV_SERIAL=ON \
-            -DENABLE_DEV_USB_HID=ON \
-            -DENABLE_DEV_WS281XPWM=OFF \
-            -DENABLE_DEV_TINKERFORGE=ON \
-            -DENABLE_MDNS=ON \
-            -DENABLE_DEPLOY_DEPENDENCIES=OFF \
-            -DENABLE_BOBLIGHT_SERVER=ON \
-            -DENABLE_FLATBUF_SERVER=ON \
-            -DENABLE_PROTOBUF_SERVER=OFF \
-            -DENABLE_FORWARDER=ON \
-            -DENABLE_FLATBUF_CONNECT=ON \
+            -DENABLE_QT=OFF \
             -G Ninja
+
           cmake --build .
           popd
+
 
       - name: Copy built binaries to release/
         run: |
