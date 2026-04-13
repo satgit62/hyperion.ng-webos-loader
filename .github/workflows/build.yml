@@ -1,4 +1,4 @@
-name: WebOS Qt6 
+name: WebOS Qt6 Embedded Deterministic Pipeline
 
 on:
   push:
@@ -118,4 +118,3 @@ jobs:
       with:
         name: hyperion-webos-build
         path: release
-
