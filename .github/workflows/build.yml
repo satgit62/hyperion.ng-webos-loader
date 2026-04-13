@@ -75,6 +75,9 @@ jobs:
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
             -DCMAKE_TOOLCHAIN_FILE="${TOOLCHAIN_FILE}" \
             -DPython3_EXECUTABLE="${TOOLCHAIN_DIR}/bin/python3" \
+            -DQt6_DIR=${TOOLCHAIN_DIR}/arm-webos-linux-gnueabi/sysroot/usr/local/qt6/lib/cmake/Qt6 \
+            -DQt6HostInfo_DIR=$QT_TOOLCHAIN_DIR/lib/cmake/Qt6HostInfo \
+            -DQt6CoreTools_DIR=$QT_TOOLCHAIN_DIR/lib/cmake/Qt6CoreTools \
             -DCMAKE_BUILD_TYPE=Release \
             -DPLATFORM=rpi \
             -DENABLE_DEV_FTDI=ON \
