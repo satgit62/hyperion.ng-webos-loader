@@ -1,4 +1,3 @@
-```yaml
 name: WebOS build
 on:
   push:
