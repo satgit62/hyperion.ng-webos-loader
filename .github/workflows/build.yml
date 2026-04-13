@@ -27,13 +27,16 @@ jobs:
           submodules: recursive
 
       # =========================
-      # TOOLCHAIN
+      # SYSTEM DEPENDENCIES
       # =========================
       - name: Install dependencies
         run: |
           sudo apt update
           sudo apt install -y git cmake ninja-build build-essential wget ccache
 
+      # =========================
+      # TOOLCHAIN
+      # =========================
       - name: Download toolchain
         run: |
           set -e
@@ -47,17 +50,23 @@ jobs:
           echo "PATH=$QT_HOST_PREFIX/bin:$PATH" >> $GITHUB_ENV
 
       # =========================
-      # QT HOST (STABLE SDK)
+      # QT HOST SDK (FIXED CLANG ISSUE)
       # =========================
-      - name: Build Qt6 Host SDK
+      - name: Build Qt6 Host SDK (clang-safe)
         run: |
           set -e
 
-          rm -rf qt-host qt-host-build /opt/qt6-host
+          rm -rf qt-host-build /opt/qt6-host
           mkdir qt-host-build && cd qt-host-build
 
           git clone --depth 1 --branch v${QT_VERSION} https://github.com/qt/qtbase.git qtbase
           git clone --depth 1 --branch v${QT_VERSION} https://github.com/qt/qttools.git qttools
+
+          # =========================
+          # IMPORTANT: disable LLVM / Clang completely
+          # =========================
+          export LLVM_INSTALL_DIR=/nonexistent
+          export CLANG_INCLUDE_DIR=/nonexistent
 
           cmake -S qtbase -B build-base \
             -G Ninja \
@@ -67,19 +76,24 @@ jobs:
             -DQT_BUILD_EXAMPLES=OFF \
             -DQT_BUILD_TOOLS_BY_DEFAULT=ON \
             -DQT_FEATURE_opengl=off \
-            -DINPUT_opengl=no
+            -DINPUT_opengl=no \
+            -DQT_FEATURE_clang=OFF \
+            -DQT_FEATURE_clangcpp=OFF \
+            -DQT_FEATURE_qdoc=OFF \
+            -DQT_FEATURE_qml_debug=OFF
 
           cmake --build build-base --parallel $(nproc)
           cmake --install build-base
 
           export Qt6_DIR=${QT_HOST_PREFIX}/lib/cmake/Qt6
-          export PATH=${QT_HOST_PREFIX}/bin:$PATH
 
           cmake -S qttools -B build-tools \
             -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_INSTALL_PREFIX=${QT_HOST_PREFIX} \
-            -DQt6_DIR=${QT_HOST_PREFIX}/lib/cmake/Qt6
+            -DQt6_DIR=${QT_HOST_PREFIX}/lib/cmake/Qt6 \
+            -DQT_FEATURE_clang=OFF \
+            -DQT_FEATURE_qdoc=OFF
 
           cmake --build build-tools --parallel $(nproc)
           cmake --install build-tools
