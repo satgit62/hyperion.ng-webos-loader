@@ -176,16 +176,15 @@ jobs:
           echo "------------------ ARCH TEST -------------------"
           file ${TOOLCHAIN_DIR}/arm-webos-linux-gnueabi/sysroot/usr/local/qt6/lib/libQt6SerialPort.so*
 
-      - name: Build
+      - name: Build (webos arm)
         env:
-          CCACHE_DIR: ${{ github.workspace }}/${{ env.CCACHE_DIR }}
+          CCACHE_DIR: ${{ github.workspace }}/${{ env.CCACHE_CACHE_DIR }}
         run: |
-          mkdir -p -- "./${{ env.BUILD_DIR }}"
-          pushd -- "./${{ env.BUILD_DIR }}"
+          pushd ./${{ env.BUILD_DIR }}
           cmake .. \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
-            -DCMAKE_TOOLCHAIN_FILE="${TOOLCHAIN_FILE}" \
+            -DCMAKE_TOOLCHAIN_FILE=${TOOLCHAIN_FILE} \
             -DPython3_EXECUTABLE="${TOOLCHAIN_DIR}/bin/python3" \
             -DQt6_DIR=${TOOLCHAIN_DIR}/arm-webos-linux-gnueabi/sysroot/usr/local/qt6/lib/cmake/Qt6 \
             -DQt6HostInfo_DIR=$QT_TOOLCHAIN_DIR/lib/cmake/Qt6HostInfo \
