@@ -1,4 +1,4 @@
-name: WebOS build
+name: WebOS build (Qt6 Reference Pipeline)
 
 on:
   push:
@@ -24,26 +24,16 @@ jobs:
           path: hyperion.ng
           submodules: recursive
 
-      ############################################
-      # CACHE (TOOLCHAIN + QT)
-      ############################################
-
-      - name: Cache toolchain + Qt
-        id: cache-toolchain
-        uses: actions/cache@v4
-        with:
-          path: |
-            /opt/arm-webos-linux-gnueabi_sdk-buildroot
-          key: webos-qt6-${{ runner.os }}-6.8.3-v3
-          restore-keys: |
-            webos-qt6-${{ runner.os }}
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y git cmake ninja-build build-essential curl ccache
 
       ############################################
-      # TOOLCHAIN DOWNLOAD (SAFE)
+      # TOOLCHAIN DOWNLOAD (ROBUST)
       ############################################
 
       - name: Download toolchain
-        if: steps.cache-toolchain.outputs.cache-hit != 'true'
         run: |
           set -e
           mkdir -p /opt
@@ -57,38 +47,37 @@ jobs:
           tar xf toolchain.tar.gz
 
       - name: Relocate toolchain
-        if: steps.cache-toolchain.outputs.cache-hit != 'true'
         run: |
           cd ${TOOLCHAIN_DIR}
           ./relocate-sdk.sh
 
       ############################################
-      # HOST DEPENDENCIES
+      # QT HOST BUILD (FULL SDK FIX)
       ############################################
 
-      - name: Install dependencies
-        run: |
-          sudo apt update
-          sudo apt install -y git cmake ninja-build build-essential curl ccache
-
-      ############################################
-      # QT BUILD (ONLY IF CACHE MISS)
-      ############################################
-
-      - name: Build Qt6
-        if: steps.cache-toolchain.outputs.cache-hit != 'true'
+      - name: Build Qt Host (Qt6 SDK)
         run: |
           set -e
           qt_version="6.8.3"
 
-          ########################################
-          # HOST QT TOOLS (FIX Qt6HostInfo)
-          ########################################
-
+          git clone --depth 1 --branch v${qt_version} https://github.com/qt/qtbase.git qtbase_host
           git clone --depth 1 --branch v${qt_version} https://github.com/qt/qttools.git qttools_host
-          mkdir qt_tools_build
-          cd qt_tools_build
 
+          mkdir qt_host_build
+          cd qt_host_build
+
+          # BASE (creates Qt6Config.cmake)
+          cmake ../qtbase_host \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX=$QT_HOST_PATH \
+            -DQT_BUILD_TESTS=OFF \
+            -DQT_BUILD_EXAMPLES=OFF
+
+          cmake --build . --parallel $(nproc)
+          cmake --install .
+
+          # TOOLS (syncqt, moc, rcc + Qt6HostInfo)
           cmake ../qttools_host \
             -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
@@ -101,11 +90,17 @@ jobs:
 
           cd ..
 
-          ########################################
-          # TARGET QT (WIDGETS + GUI ENABLED)
-          ########################################
+      ############################################
+      # QT TARGET BUILD (WEBOS / WIDGETS ENABLED)
+      ############################################
+
+      - name: Build Qt Target (Cross)
+        run: |
+          set -e
+          qt_version="6.8.3"
 
           git clone --depth 1 --branch v${qt_version} https://github.com/qt/qtbase.git qtbase_target
+
           mkdir qt_target_build
           cd qt_target_build
 
@@ -115,6 +110,7 @@ jobs:
             -DCMAKE_INSTALL_PREFIX=$TOOLCHAIN_DIR/arm-webos-linux-gnueabi/sysroot/usr/local/qt6 \
             -DCMAKE_TOOLCHAIN_FILE=${TOOLCHAIN_FILE} \
             -DQT_HOST_PATH=$QT_HOST_PATH \
+            -DQt6_DIR=$TOOLCHAIN_DIR/arm-webos-linux-gnueabi/sysroot/usr/local/qt6/lib/cmake/Qt6 \
             -DQt6CoreTools_DIR=$QT_HOST_PATH/lib/cmake/Qt6CoreTools \
             -DQt6HostInfo_DIR=$QT_HOST_PATH/lib/cmake/Qt6HostInfo \
             -DQT_BUILD_TESTS=OFF \
@@ -125,12 +121,13 @@ jobs:
           cmake --build . --parallel $(nproc)
           cmake --install .
 
+          cd ..
+
       ############################################
       # QT MODULES
       ############################################
 
       - name: Build Qt Modules
-        if: steps.cache-toolchain.outputs.cache-hit != 'true'
         run: |
           set -e
           qt_version="6.8.3"
@@ -158,7 +155,7 @@ jobs:
           cmake --install build-ws
 
       ############################################
-      # BUILD PROJECT
+      # HYPERION BUILD
       ############################################
 
       - name: Build Hyperion
