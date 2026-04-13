@@ -85,100 +85,177 @@ jobs:
           sudo apt install -y ${{ env.apt_deps }}
 
       - name: "Build QT"
-      # credits to https://github.com/satgit62/satgit62.github.io/releases/download/v0.2.0-alpha/build.sh
-       
-        if: steps.cache-toolchain.outputs.cache-hit != 'true'
-        run: |
-          mkdir -p ${QT_DIR}
-          git clone --branch v${QT_VERSION} https://github.com/qt/qtbase.git ${QT_DIR}/qt_source
+############################################
+#                BUILD QT                  #
+############################################
 
-          echo "========================== BUILDING QTBASE (HOST) ============================"
-          mkdir -p ${QT_DIR}/host
-          cd ${QT_DIR}/host
+qt_version="6.8.3"
 
-          ../qt_source/configure \
-              -prefix $QT_TOOLCHAIN_DIR \
-              -nomake tests -nomake examples \
-              -no-dbus -no-gui -no-serialport -no-websockets \
-              -no-widgets -no-sql-sqlite -no-icu -no-feature-network \
-              -no-opengl -no-core
+required_version="3.27.7"
+current_version=$(cmake --version | head -n1 | awk '{print $3}' | sed 's/[^0-9.].*$//')
+if [ "$(printf '%s\n' "$current_version" "$required_version" | sort -V | head -n1)" != "$required_version" ]; then
+  echo "CMake version $current_version is older than $required_version"
+  build_option_qt="-no-sbom"
+  build_option_qt_serial="-DQT_GENERATE_SBOM=OFF"
+else
+  echo "CMake version is $current_version. SBOM is supported."
+fi
 
-          echo "----------------- BUILD (HOST) ------------------"
-          cmake --build . --parallel
-          cmake --install .
+git clone --branch v${qt_version} --depth 1 https://github.com/qt/qtbase.git qt_lts
+mkdir qt_build
+cd qt_build
 
-          echo "------------------ HOST FILES ------------------"
-          ls $QT_TOOLCHAIN_DIR
+############################################
+#        FIXED QT CONFIGURATION            #
+############################################
 
-          echo "========================== BUILDING QTBASE (CROSS) ============================"
-          mkdir -p ${QT_DIR}/base
-          cd ${QT_DIR}/base
+../qt_lts/configure \
+-prefix /usr \
+-bindir /usr/qt_${qt_version}_bin \
+-headerdir /usr/qt_${qt_version}_include \
+-hostdatadir /usr/qt_${qt_version}_host \
+-archdatadir /usr/qt_${qt_version} \
+-datadir /usr/qt_${qt_version} \
+-submodules qtbase,qtnetwork,qtsql,qtwebsockets \
+${build_option_qt} \
+-no-icu \
+-nomake tests \
+-nomake examples
 
-          rm -rf ${TOOLCHAIN_DIR}/arm-webos-linux-gnueabi/sysroot/usr/local/qt6
+if [ "$?" -ne "0" ]; then
+  echo "Qt configuration failed"
+  exit 1
+fi
 
-          rm -rf ${QT_DIR}/qt_source/mkspecs/devices/linux-webos-g++
-          mkdir -p ${QT_DIR}/qt_source/mkspecs/devices/linux-webos-g++
+cmake --build . --parallel
+if [ "$?" -ne "0" ]; then
+  echo "Qt build failed"
+  exit 1
+fi
 
-          cp -r $TOOLCHAIN_DIR/mkspecs/devices/linux-buildroot-g++ ${QT_DIR}/qt_source/mkspecs/devices/linux-webos-g++
+cmake --install .
+if [ "$?" -ne "0" ]; then
+  echo "Qt install failed"
+  exit 1
+fi
 
-          mv "${QT_DIR}/qt_source/src/corelib/io/forkfd_qt.c" "${QT_DIR}/qt_source/src/corelib/io/forkfd_qt.cpp"
-          sed -i 's/forkfd_qt\.c/forkfd_qt.cpp/' "${QT_DIR}/qt_source/src/corelib/CMakeLists.txt"
-          sed -i 's/readOnly = (statfs_buf.f_flags & ST_RDONLY) != 0;/readOnly = false;/' ${QT_DIR}/qt_source/src/corelib/io/qstorageinfo_linux.cpp
+############################################
+#         BUILD QT SERIALPORT              #
+############################################
 
-          printf '\n# --- WebOS lean build adjustments for Qt6 ---\n' >> "${TOOLCHAIN_FILE}"
-          printf 'message(STATUS "Disabling RPATH for lean WebOS build")\n' >> "${TOOLCHAIN_FILE}"
-          printf 'set(CMAKE_SKIP_RPATH TRUE)\n' >> "${TOOLCHAIN_FILE}"
-          printf 'set(CMAKE_BUILD_WITH_INSTALL_RPATH FALSE)\n' >> "${TOOLCHAIN_FILE}"
-          sed -i '1i#define EM_AARCH64 183' ${QT_DIR}/qt_source/src/corelib/plugin/qelfparser_p.cpp
+rm -rf *
+git clone --branch v${qt_version} --depth 1 https://github.com/qt/qtserialport.git qtserialport
 
-          ../qt_source/configure \
-              -prefix $SYSROOT/usr/local/qt6 \
-              -release \
-              -platform linux-g++ \
-              -device linux-webos-g++ \
-              -device-option CROSS_COMPILE=$TOOLCHAIN_DIR/bin/arm-webos-linux-gnueabi- \
-              -qt-host-path ${QT_TOOLCHAIN_DIR} \
-              -no-dbus -no-gui -no-serialport -no-websockets \
-              -no-widgets -no-sql-sqlite -no-icu -no-feature-network \
-              -no-opengl -no-core \
-              -nomake tests -nomake examples \
-              -- -DCMAKE_TOOLCHAIN_FILE=${TOOLCHAIN_FILE} \
-              -DQt6CoreTools_DIR=$QT_TOOLCHAIN_DIR/lib/cmake/Qt6CoreTools \
-              -DQt6WidgetsTools_DIR=$QT_TOOLCHAIN_DIR/lib/cmake/Qt6WidgetsTools \
-              -DQt6GuiTools_DIR=$QT_TOOLCHAIN_DIR/lib/cmake/Qt6GuiTools
+cmake -G Ninja -DCMAKE_BUILD_TYPE=Release ${build_option_qt_serial} ./qtserialport
+if [ "$?" -ne "0" ]; then
+  echo "Qt serial configuration failed"
+  exit 1
+fi
 
-          echo "---------------- SUMMARY (ARM) -----------------"
-          cat CMakeCache.txt | grep -E "CMAKE_CXX_COMPILER|CMAKE_TOOLCHAIN_FILE|CMAKE_INSTALL_PREFIX|CMAKE_SYSTEM_NAME" || true
+cmake --build . --parallel
+if [ "$?" -ne "0" ]; then
+  echo "Qt serialport build failed"
+  exit 1
+fi
 
-          echo "----------------- BUILD (ARM) ------------------"
-          cmake --build . --parallel
-          cmake --install .
+cmake --install .
+if [ "$?" -ne "0" ]; then
+  echo "Qt serialport install failed"
+  exit 1
+fi
 
-          echo "------------------ ARCH TEST -------------------"
-          file $SYSROOT/usr/local/qt6/lib/libQt6Core.so*
-          file $SYSROOT/usr/local/qt6/lib/libQt6Network.so*
+############################################
+#         BUILD QT WEBSOCKETS              #
+############################################
 
-          echo "========================== BUILDING QTSERIALPORT (CROSS) ============================"
-          mkdir -p ${QT_DIR}
+rm -rf *
+git clone --branch v${qt_version} --depth 1 https://github.com/qt/qtwebsockets.git qtwebsockets
 
-          git clone --branch v${QT_VERSION} https://github.com/qt/qtserialport.git ${QT_DIR}/qtserialport
-          mkdir -p ${QT_DIR}/qtserialport/build
-          cd ${QT_DIR}/qtserialport/build
-          cmake -DCMAKE_BUILD_TYPE=Release \
-                -DCMAKE_TOOLCHAIN_FILE="${TOOLCHAIN_FILE}" \
-                -DQT_HOST_PATH="${QT_TOOLCHAIN_DIR}" \
-                -DCMAKE_PREFIX_PATH="$SYSROOT/usr/local/qt6/lib/cmake" \
-                -DCMAKE_INSTALL_PREFIX="$SYSROOT/usr/local/qt6" ..
+cmake -G Ninja -DCMAKE_BUILD_TYPE=Release ${build_option_qt_serial} ./qtwebsockets
+if [ "$?" -ne "0" ]; then
+  echo "Qt websockets configuration failed"
+  exit 1
+fi
 
-          echo "---------------- SUMMARY (ARM) -----------------"
-          cat CMakeCache.txt | grep -E "CMAKE_CXX_COMPILER|CMAKE_TOOLCHAIN_FILE|CMAKE_INSTALL_PREFIX|CMAKE_SYSTEM_NAME" || true
+cmake --build . --parallel
+if [ "$?" -ne "0" ]; then
+  echo "Qt websockets build failed"
+  exit 1
+fi
 
-          echo "----------------- BUILD (ARM) ------------------"
-          cmake --build . --parallel --verbose
-          cmake --install .
+cmake --install .
+if [ "$?" -ne "0" ]; then
+  echo "Qt websockets install failed"
+  exit 1
+fi
 
-          echo "------------------ ARCH TEST -------------------"
-          file ${TOOLCHAIN_DIR}/arm-webos-linux-gnueabi/sysroot/usr/local/qt6/lib/libQt6SerialPort.so*
+cd ..
+rm -rf qt_lts
+if [ "$?" -ne "0" ]; then
+  echo "Qt clean failed (1)"
+  exit 1
+fi
+
+rm -rf qt_build
+if [ "$?" -ne "0" ]; then
+  echo "Qt clean failed (2)"
+  exit 1
+fi
+
+############################################
+#              BUILD CCACHE                #
+############################################
+
+ccache_version="4.11.3"
+
+mkdir ccache
+cd ccache
+
+wget "https://github.com/ccache/ccache/releases/download/v${ccache_version}/ccache-${ccache_version}.tar.gz"
+if [ "$?" -ne "0" ]; then
+  echo "Could not download ccache sources"
+  exit 1
+fi
+
+tar -zxvf "ccache-${ccache_version}.tar.gz"
+if [ "$?" -ne "0" ]; then
+  echo "Extracting of ccache failed"
+  exit 1
+fi
+
+cd "ccache-${ccache_version}"
+if [ "$?" -ne "0" ]; then
+  echo "Missing ccache folder"
+  exit 1
+fi
+
+mkdir build
+cd build
+
+cmake -DHIREDIS_FROM_INTERNET=ON -DCMAKE_BUILD_TYPE=Release ..
+if [ "$?" -ne "0" ]; then
+  echo "CMake config failed"
+  exit 1
+fi
+
+make -j $(nproc)
+if [ "$?" -ne "0" ]; then
+  echo "Make failed"
+  exit 1
+fi
+
+make install
+if [ "$?" -ne "0" ]; then
+  echo "Make install failed"
+  exit 1
+fi
+
+cd ../../..
+rm -rf ccache
+if [ "$?" -ne "0" ]; then
+  echo "Clean up failed"
+  exit 1
+fi
 
       - name: Build (webos arm)
         env:
