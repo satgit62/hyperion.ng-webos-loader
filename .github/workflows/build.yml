@@ -87,19 +87,26 @@ jobs:
           fetch-depth: 0
 
       - name: Restore/Cache build directories
-        uses: actions/cache@v4
+        uses: actions/cache@v3
         with:
-          path: ${{ github.workspace }}/${{ env.CCACHE_DIR }}
+          path: |
+            ${{ github.workspace }}/${{ env.CCACHE_CACHE_DIR }}
+
           key: ccache-${{ runner.os }}-${{github.run_id}}
-          restore-keys: ccache-${{ runner.os }}
+          restore-keys: |
+            ccache-${{ runner.os }}
 
-      - name: Cache toolchain dir
-        id: cache-toolchain
-        uses: actions/cache@v4
+      - name: Create build directories
+        run: |
+          mkdir -p ./${{ env.BUILD_DIR }}
+
+      - name: Restore toolchain cache
+        id: cache-toolchain-restore
+        uses: actions/cache@v3
         with:
-          path: ${{ env.TOOLCHAIN_DIR }}
-          key: ${{ runner.os }}-${{ env.TOOLCHAIN_URL }}
-
+          path: ${{ github.workspace }}/buildroot-nc4/output/images/*_sdk-buildroot*.tar.gz
+          key: toolchain-${{ runner.os }}-${{ env.TOOLCHAIN_REVISION }}
+      
       - name: Unpack toolchain
         working-directory: /opt
         run: |
@@ -109,6 +116,7 @@ jobs:
           ./relocate-sdk.sh
           popd
           find ${TOOLCHAIN_DIR}/bin -type f -iname "perl*" -delete
+
 
       - name: Install ccache
         run: |
