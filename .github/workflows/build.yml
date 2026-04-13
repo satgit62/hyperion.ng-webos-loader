@@ -34,35 +34,147 @@ jobs:
           fetch-depth: 0
 
       - name: Restore/Cache build directories
-        uses: actions/cache@v4
+        uses: actions/cache@v3
         with:
-          path: ${{ github.workspace }}/${{ env.CCACHE_DIR }}
+          path: ${{ github.workspace }}/${{ env.CCACHE_CACHE_DIR }}
           key: ccache-${{ runner.os }}-${{github.run_id}}
-          restore-keys: ccache-${{ runner.os }}
+          restore-keys: |
+            ccache-${{ runner.os }}
 
-      - name: Cache toolchain dir
+      - name: Restore/Cache toolchain dir
         id: cache-toolchain
         uses: actions/cache@v4
         with:
-          path: ${{ env.TOOLCHAIN_DIR }}
+          path: |
+            ${{ env.TOOLCHAIN_DIR }}
+            ${{ env.QT_DIR }}
+
           key: ${{ runner.os }}-${{ env.TOOLCHAIN_URL }}
+
+      - name: Create build directories
+        run: |
+          mkdir -p ./${{ env.BUILD_DIR }}
 
       - name: Download and unpack toolchain
         if: steps.cache-toolchain.outputs.cache-hit != 'true'
         working-directory: /opt
         run: |
-          wget -q -O toolchain.tar.gz -- "${TOOLCHAIN_URL}"
+          wget -q -O toolchain.tar.gz ${TOOLCHAIN_URL}
           tar xf toolchain.tar.gz
-          pushd -- "${TOOLCHAIN_DIR}"
+
+      - name: Relocate toolchain
+        run: |
+          pushd ${TOOLCHAIN_DIR}
           ./relocate-sdk.sh
           popd
-          find -- "${TOOLCHAIN_DIR}/bin" -type f -iname 'perl*' -delete
 
-      - name: Install ccache
+      - name: Fix toolchain (remove perl)
+        run: |
+          find ${TOOLCHAIN_DIR}/bin -type f -iname "perl*" -delete
+
+      - name: Set up host QT Toolchain path
+        run: |
+          echo "QT_TOOLCHAIN_DIR=$TOOLCHAIN_DIR/qt6-host" >> $GITHUB_ENV
+          echo "SYSROOT=$TOOLCHAIN_DIR/arm-webos-linux-gnueabi/sysroot" >> $GITHUB_ENV
+
+      - name: Install native dependencies
+        env:
+          apt_deps: ccache git cmake build-essential flatbuffers-compiler
         run: |
           sudo apt update
-          sudo apt install -y ccache
+          sudo apt install -y ${{ env.apt_deps }}
 
+      - name: "Build QT: Core, Network and SerialPort"
+        # credits to https://github.com/awawa-dev/HyperDockerBuilder/blob/6c5b3fcfee013265be3f3732db641daa2fc7988a/build.sh
+        if: steps.cache-toolchain.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p ${QT_DIR}
+          git clone --branch v${QT_VERSION} https://github.com/qt/qtbase.git ${QT_DIR}/qt_source
+
+          echo "========================== BUILDING QTBASE (HOST) ============================"
+          mkdir -p ${QT_DIR}/host
+          cd ${QT_DIR}/host
+
+          ../qt_source/configure \
+              -prefix $QT_TOOLCHAIN_DIR \
+              -nomake tests -nomake examples \
+              -no-dbus -no-gui -no-widgets -no-sql-sqlite -no-icu -no-feature-network \
+              -no-opengl
+
+          echo "----------------- BUILD (HOST) ------------------"
+          cmake --build . --parallel
+          cmake --install .
+
+          echo "------------------ HOST FILES ------------------"
+          ls $QT_TOOLCHAIN_DIR
+
+          echo "========================== BUILDING QTBASE (CROSS) ============================"
+          mkdir -p ${QT_DIR}/base
+          cd ${QT_DIR}/base
+
+          rm -rf ${TOOLCHAIN_DIR}/arm-webos-linux-gnueabi/sysroot/usr/local/qt6
+
+          rm -rf ${QT_DIR}/qt_source/mkspecs/devices/linux-webos-g++
+          mkdir -p ${QT_DIR}/qt_source/mkspecs/devices/linux-webos-g++
+
+          cp -r $TOOLCHAIN_DIR/mkspecs/devices/linux-buildroot-g++ ${QT_DIR}/qt_source/mkspecs/devices/linux-webos-g++
+
+          mv "${QT_DIR}/qt_source/src/corelib/io/forkfd_qt.c" "${QT_DIR}/qt_source/src/corelib/io/forkfd_qt.cpp"
+          sed -i 's/forkfd_qt\.c/forkfd_qt.cpp/' "${QT_DIR}/qt_source/src/corelib/CMakeLists.txt"
+          sed -i 's/readOnly = (statfs_buf.f_flags & ST_RDONLY) != 0;/readOnly = false;/' ${QT_DIR}/qt_source/src/corelib/io/qstorageinfo_linux.cpp
+
+          printf '\n# --- WebOS lean build adjustments for Qt6 ---\n' >> "${TOOLCHAIN_FILE}"
+          printf 'message(STATUS "Disabling RPATH for lean WebOS build")\n' >> "${TOOLCHAIN_FILE}"
+          printf 'set(CMAKE_SKIP_RPATH TRUE)\n' >> "${TOOLCHAIN_FILE}"
+          printf 'set(CMAKE_BUILD_WITH_INSTALL_RPATH FALSE)\n' >> "${TOOLCHAIN_FILE}"
+          sed -i '1i#define EM_AARCH64 183' ${QT_DIR}/qt_source/src/corelib/plugin/qelfparser_p.cpp
+
+          ../qt_source/configure \
+              -prefix $SYSROOT/usr/local/qt6 \
+              -release \
+              -platform linux-g++ \
+              -device linux-webos-g++ \
+              -device-option CROSS_COMPILE=$TOOLCHAIN_DIR/bin/arm-webos-linux-gnueabi- \
+              -qt-host-path ${QT_TOOLCHAIN_DIR} \
+              -no-dbus -no-gui -no-widgets -no-sql-sqlite -no-icu \
+              -nomake tests -nomake examples \
+              -- -DCMAKE_TOOLCHAIN_FILE=${TOOLCHAIN_FILE} \
+              -DQt6CoreTools_DIR=$QT_TOOLCHAIN_DIR/lib/cmake/Qt6CoreTools \
+              -DQt6WidgetsTools_DIR=$QT_TOOLCHAIN_DIR/lib/cmake/Qt6WidgetsTools \
+              -DQt6GuiTools_DIR=$QT_TOOLCHAIN_DIR/lib/cmake/Qt6GuiTools
+
+          echo "---------------- SUMMARY (ARM) -----------------"
+          cat CMakeCache.txt | grep -E "CMAKE_CXX_COMPILER|CMAKE_TOOLCHAIN_FILE|CMAKE_INSTALL_PREFIX|CMAKE_SYSTEM_NAME" || true
+
+          echo "----------------- BUILD (ARM) ------------------"
+          cmake --build . --parallel
+          cmake --install .
+
+          echo "------------------ ARCH TEST -------------------"
+          file $SYSROOT/usr/local/qt6/lib/libQt6Core.so*
+          file $SYSROOT/usr/local/qt6/lib/libQt6Network.so*
+
+          echo "========================== BUILDING QTSERIALPORT (CROSS) ============================"
+          mkdir -p ${QT_DIR}
+
+          git clone --branch v${QT_VERSION} https://github.com/qt/qtserialport.git ${QT_DIR}/qtserialport
+          mkdir -p ${QT_DIR}/qtserialport/build
+          cd ${QT_DIR}/qtserialport/build
+          cmake -DCMAKE_BUILD_TYPE=Release \
+                -DCMAKE_TOOLCHAIN_FILE="${TOOLCHAIN_FILE}" \
+                -DQT_HOST_PATH="${QT_TOOLCHAIN_DIR}" \
+                -DCMAKE_PREFIX_PATH="$SYSROOT/usr/local/qt6/lib/cmake" \
+                -DCMAKE_INSTALL_PREFIX="$SYSROOT/usr/local/qt6" ..
+
+          echo "---------------- SUMMARY (ARM) -----------------"
+          cat CMakeCache.txt | grep -E "CMAKE_CXX_COMPILER|CMAKE_TOOLCHAIN_FILE|CMAKE_INSTALL_PREFIX|CMAKE_SYSTEM_NAME" || true
+
+          echo "----------------- BUILD (ARM) ------------------"
+          cmake --build . --parallel --verbose
+          cmake --install .
+
+          echo "------------------ ARCH TEST -------------------"
+          file ${TOOLCHAIN_DIR}/arm-webos-linux-gnueabi/sysroot/usr/local/qt6/lib/libQt6SerialPort.so*
 
       - name: Build
         env:
