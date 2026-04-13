@@ -3,74 +3,21 @@ on:
   push:
   pull_request:
   workflow_dispatch:
+  workflow_call:
 
 env:
-  TOOLCHAIN_REVISION: a38c582ea397fec612811f8e933ae982d41fc5a3
+  TOOLCHAIN_URL: https://github.com/openlgtv/buildroot-nc4/releases/download/webos-a38c582/arm-webos-linux-gnueabi_sdk-buildroot-x86_64.tar.gz
   TOOLCHAIN_DIR: /opt/arm-webos-linux-gnueabi_sdk-buildroot
   TOOLCHAIN_ENV_FILE: /opt/arm-webos-linux-gnueabi_sdk-buildroot/environment-setup
   TOOLCHAIN_FILE: /opt/arm-webos-linux-gnueabi_sdk-buildroot/share/buildroot/toolchainfile.cmake
   BUILD_DIR: build
 
-  CCACHE_CACHE_DIR: .ccache-build
+  CCACHE_DIR: .ccache-build
   CCACHE_COMPRESS: true
   CCACHE_COMPRESSLEVEL: 6
   CCACHE_MAXSIZE: 600M
 
 jobs:
-
-  build_sdk:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ${{ github.workspace }}/buildroot-nc4
-
-    steps:
-      - name: Restore toolchain cache
-        id: cache-toolchain-restore
-        uses: actions/cache@v3
-        with:
-          path: ${{ github.workspace }}/buildroot-nc4/output/images/*_sdk-buildroot*.tar.gz
-          key: toolchain-${{ runner.os }}-${{ env.TOOLCHAIN_REVISION }}
-
-      - uses: actions/checkout@v3
-        if: steps.cache-toolchain-restore.outputs.cache-hit != 'true'
-        with:
-          repository: openlgtv/buildroot-nc4
-          ref: ${{ env.TOOLCHAIN_REVISION }}
-          path: ${{ github.workspace }}/buildroot-nc4
-          fetch-depth: 0
-
-      - name: Prepare Environment
-        if: steps.cache-toolchain-restore.outputs.cache-hit != 'true'
-        working-directory: ${{ github.workspace }}/buildroot-nc4
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y cpio rsync bc
-          make webos_tv_defconfig
-          echo "BR2_PACKAGE_QT5=n" >> .config
-          echo "BR2_PACKAGE_QT6=y" >> .config
-          echo "BR2_PACKAGE_QT6BASE_NETWORK=y" >> .config
-          echo "BR2_PACKAGE_QT6SERIALPORT=y" >> .config
-          echo "BR2_PACKAGE_ICU=n" >> .config
-          wget https://gist.githubusercontent.com/sundermann/eec535ef79adb87367a6030f713d5e27/raw/20b9add1b41e0c0c55dd11aaeff41160eebe9693/em_aarch64.patch -O package/qt6/qt6base/em_aarch64.patch
-          wget https://gist.githubusercontent.com/sundermann/eec535ef79adb87367a6030f713d5e27/raw/20b9add1b41e0c0c55dd11aaeff41160eebe9693/statvfs.patch -O package/qt6/qt6base/statvfs.patch
-          make olddefconfig
-
-      - name: Build SDK
-        if: steps.cache-toolchain-restore.outputs.cache-hit != 'true'
-        working-directory: ${{ github.workspace }}/buildroot-nc4
-        run: |
-          make sdk
-
-      - name: Cache toolchain
-        if: steps.cache-toolchain-restore.outputs.cache-hit != 'true'
-        id: cache-toolchain
-        uses: actions/cache@v3
-        with:
-          path: ${{ github.workspace }}/buildroot-nc4/output/images/*_sdk-buildroot*.tar.gz
-          key: toolchain-${{ runner.os }}-${{ env.TOOLCHAIN_REVISION }}
-
-
   build_hyperion_ng:
     runs-on: ubuntu-latest
     defaults:
@@ -87,41 +34,35 @@ jobs:
           fetch-depth: 0
 
       - name: Restore/Cache build directories
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
-          path: |
-            ${{ github.workspace }}/${{ env.CCACHE_CACHE_DIR }}
-
+          path: ${{ github.workspace }}/${{ env.CCACHE_DIR }}
           key: ccache-${{ runner.os }}-${{github.run_id}}
-          restore-keys: |
-            ccache-${{ runner.os }}
+          restore-keys: ccache-${{ runner.os }}
 
-      - name: Create build directories
-        run: |
-          mkdir -p ./${{ env.BUILD_DIR }}
-
-      - name: Restore toolchain cache
-        id: cache-toolchain-restore
-        uses: actions/cache@v3
+      - name: Cache toolchain dir
+        id: cache-toolchain
+        uses: actions/cache@v4
         with:
-          path: ${{ github.workspace }}/buildroot-nc4/output/images/*_sdk-buildroot*.tar.gz
-          key: toolchain-${{ runner.os }}-${{ env.TOOLCHAIN_REVISION }}
-      
-      - name: Unpack toolchain
+          path: ${{ env.TOOLCHAIN_DIR }}
+          key: ${{ runner.os }}-${{ env.TOOLCHAIN_URL }}
+
+      - name: Download and unpack toolchain
+        if: steps.cache-toolchain.outputs.cache-hit != 'true'
         working-directory: /opt
         run: |
-          cp ${{ github.workspace }}/buildroot-nc4/output/images/*_sdk-buildroot*.tar.gz toolchain.tar.gz
+          wget -q -O toolchain.tar.gz -- "${TOOLCHAIN_URL}"
           tar xf toolchain.tar.gz
-          pushd ${TOOLCHAIN_DIR}
+          pushd -- "${TOOLCHAIN_DIR}"
           ./relocate-sdk.sh
           popd
-          find ${TOOLCHAIN_DIR}/bin -type f -iname "perl*" -delete
-
+          find -- "${TOOLCHAIN_DIR}/bin" -type f -iname 'perl*' -delete
 
       - name: Install ccache
         run: |
           sudo apt update
           sudo apt install -y ccache
+
 
       - name: Build
         env:
