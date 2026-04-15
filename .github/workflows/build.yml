@@ -50,6 +50,7 @@ jobs:
           echo "BR2_PACKAGE_QT5=n" >> .config
           echo "BR2_PACKAGE_QT6=y" >> .config
           echo "BR2_PACKAGE_QT6BASE_NETWORK=y" >> .config
+          echo "BR2_PACKAGE_QT6BASE_OPENGL=y" >> .config
           echo "BR2_PACKAGE_QT6SERIALPORT=y" >> .config
           echo "BR2_PACKAGE_QT6WEBSOCKETS=y" >> .config
           echo "BR2_PACKAGE_QT6GUI=y" >> .config
