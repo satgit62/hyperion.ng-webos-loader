@@ -173,7 +173,6 @@ jobs:
           for i in ${{ env.dependency_libs }}; do find ${TOOLCHAIN_DIR}/arm-webos-linux-gnueabi/sysroot/ -name $i -exec cp {} ./release/ \;; done
           mkdir -p ./release/tls
           cp ${TOOLCHAIN_DIR}/arm-webos-linux-gnueabi/sysroot/usr/lib/qt6/plugins/tls/libqopensslbackend.so ./release/tls/
-          find ./release
           mkdir -p ./release/sqldrivers
           mkdir -p ./release/imageformats
           mkdir -p ./release/python/lib
