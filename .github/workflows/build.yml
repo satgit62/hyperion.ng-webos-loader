@@ -138,7 +138,7 @@ jobs:
             -DENABLE_DEV_FTDI=ON \
             -DHYPERION_LIGHT=ON \
             -DENABLE_REMOTE_CTL=ON \
-            -DENABLE_QT=OFF \
+            -DENABLE_QT=ON \
             -DENABLE_AUDIO=OFF \
             -DENABLE_EFFECTENGINE=ON \
             -DENABLE_JSONCHECKS=ON \
