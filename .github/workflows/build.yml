@@ -169,7 +169,7 @@ jobs:
         env:
           dependency_libs: libpython3.10.so.1.0 libpng16.so.16 libjpeg.so.8 libcrypt.so.1 libcrypto.so.1.1 libz.so.1 libssl.so.1.1 libpcre2-16.so.0 libQt6Gui.so.6 libQt6Network.so.6 libQt6Widgets.so.6 libk5crypto.so.3 libatomic.so.1 libQt6Core.so.6 libkrb5support.so.0 libcom_err.so.3 libstdc++.so.6 libkrb5.so.3 libQt6Sql.so.6 libgssapi_krb5.so.2 libQt6SerialPort.so.6 libQt6WebSockets.so.6 libusb-1.0.so.0 libftdi1.so.2 libudev.so.1
 
-         run: |
+        run: |
           for i in ${{ env.dependency_libs }}; do find ${TOOLCHAIN_DIR}/arm-webos-linux-gnueabi/sysroot/ -name $i -exec cp {} ./release/ \;; done
           mkdir -p ./release/tls
           cp ${TOOLCHAIN_DIR}/arm-webos-linux-gnueabi/sysroot/usr/lib/qt6/plugins/tls/libqopensslbackend.so ./release/tls/
