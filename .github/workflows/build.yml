@@ -51,6 +51,8 @@ jobs:
           echo "BR2_PACKAGE_QT6=y" >> .config
           echo "BR2_PACKAGE_QT6BASE_NETWORK=y" >> .config
           echo "BR2_PACKAGE_QT6SERIALPORT=y" >> .config
+          echo "BR2_PACKAGE_QT6WEBSOCKETS=y" >> .config
+          echo "BR2_PACKAGE_QT6GUI=y" >> .config
           echo "BR2_PACKAGE_ICU=n" >> .config
           wget https://gist.githubusercontent.com/sundermann/eec535ef79adb87367a6030f713d5e27/raw/20b9add1b41e0c0c55dd11aaeff41160eebe9693/em_aarch64.patch -O package/qt6/qt6base/em_aarch64.patch
           wget https://gist.githubusercontent.com/sundermann/eec535ef79adb87367a6030f713d5e27/raw/20b9add1b41e0c0c55dd11aaeff41160eebe9693/statvfs.patch -O package/qt6/qt6base/statvfs.patch
