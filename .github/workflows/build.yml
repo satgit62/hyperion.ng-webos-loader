@@ -227,11 +227,11 @@ jobs:
               fi
           done
 
-          echo "----------------- VERIFY LIBS NEEDED BY HYPERHDR ------------------"
-          if file ./release/hyperhdr | grep -q ELF; then
-              for lib in $(readelf -d ./release/hyperhdr 2>/dev/null | grep NEEDED | awk -F'[][]' '{print $2}'); do
+          echo "----------------- VERIFY LIBS NEEDED BY HYPERION.NG ------------------"
+          if file ./release/hyperion.ng | grep -q ELF; then
+              for lib in $(readelf -d ./release/hyperion.ng 2>/dev/null | grep NEEDED | awk -F'[][]' '{print $2}'); do
                   if [ ! -f "./release/$lib" ]; then
-                      echo "⚠️ Warning: hyperhdr needs $lib but it is missing in ./release. If it's a sysroot's core system library, you can ignore it."
+                      echo "⚠️ Warning: hyperion.ng needs $lib but it is missing in ./release. If it's a sysroot's core system library, you can ignore it."
                   fi
               done
           fi
@@ -245,8 +245,8 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: hyperhdr-build
-          path: ${{ github.workspace }}/hyperhdr-repo/release/*
+          name: hyperion.ng
+          path: ${{ github.workspace }}/hyperion.ng-repo/release/*
           if-no-files-found: error
   build_ipk:
     runs-on: ubuntu-latest
