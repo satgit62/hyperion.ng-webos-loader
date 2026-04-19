@@ -238,17 +238,26 @@ jobs:
           fi
 
           mkdir -p ./release/tls
+          mkdir -p ./release/sqldrivers
+          mkdir -p ./release/imageformats
+          mkdir -p ./release/python/lib
           cp $SYSROOT/usr/local/qt6/plugins/tls/libqopensslbackend.so ./release/tls/
+          cp -t ./release/sqldrivers -- "${TOOLCHAIN_DIR}/arm-webos-linux-gnueabi/sysroot/usr/lib/qt/plugins/sqldrivers/libqsqlite.so"
+          cp -t ./release/imageformats -- "${TOOLCHAIN_DIR}/arm-webos-linux-gnueabi/sysroot/usr/lib/qt/plugins/imageformats/libqico.so"
+          cp -t ./release/imageformats -- "${TOOLCHAIN_DIR}/arm-webos-linux-gnueabi/sysroot/usr/lib/qt/plugins/imageformats/libqjpeg.so"
+          cp -r -t ./release/python/lib -- "${TOOLCHAIN_DIR}/arm-webos-linux-gnueabi/sysroot/usr/lib/python3.10"
 
           echo "-------------------- FINAL ./release CONTENT ----------------------"
           find ./release
-
+          
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: hyperion.ng
-          path: ${{ github.workspace }}/hyperion.ng-repo/release/*
+          name: hyperion.ng-build
+          path: ${{ github.workspace }}/hyperion.ng/release/*
           if-no-files-found: error
+
+          
   build_ipk:
     runs-on: ubuntu-latest
     needs: build_hyperion_ng
