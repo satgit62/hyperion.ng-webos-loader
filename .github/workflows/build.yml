@@ -92,7 +92,11 @@ jobs:
            ../qt_source/configure \
               -prefix $QT_TOOLCHAIN_DIR \
               -nomake tests -nomake examples \
-              -no-dbus -no-gui -no-widgets -no-sql-sqlite -no-icu -no-feature-network \
+              -dbus-linked \
+              -gui -widgets \
+              -sql-sqlite -qt-sqlite \
+              -network \
+              -no-icu \
               -no-opengl
 
           echo "----------------- BUILD (HOST) ------------------"
@@ -132,7 +136,11 @@ jobs:
               -device-option CROSS_COMPILE=$TOOLCHAIN_DIR/bin/arm-webos-linux-gnueabi- \
               -qt-host-path ${QT_TOOLCHAIN_DIR} \
               -nomake tests -nomake examples \
-              -no-dbus -no-gui -no-widgets -no-sql-sqlite -no-icu -no-feature-network \
+              -dbus-linked \
+              -gui -widgets \
+              -sql-sqlite -qt-sqlite \
+              -network \
+              -no-icu \
               -no-opengl
               -- -DCMAKE_TOOLCHAIN_FILE=${TOOLCHAIN_FILE} \
               -DQt6CoreTools_DIR=$QT_TOOLCHAIN_DIR/lib/cmake/Qt6CoreTools \
