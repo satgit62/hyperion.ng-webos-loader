@@ -89,13 +89,11 @@ jobs:
           mkdir -p /opt/qt_build/host
           cd /opt/qt_build/host
 
-          ../qt_source/configure \
+           ../qt_source/configure \
               -prefix $QT_TOOLCHAIN_DIR \
-              -submodules qtbase,qtnetwork,qtsql,qtwebsockets \
-               ${build_option_qt} \
-              -no-icu \
-              -nomake tests \
-              -nomake examples
+              -nomake tests -nomake examples \
+              -no-dbus -no-gui -no-widgets -no-sql-sqlite -no-icu -no-feature-network \
+              -no-opengl
 
           echo "----------------- BUILD (HOST) ------------------"
           cmake --build . --parallel
