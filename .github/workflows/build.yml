@@ -91,9 +91,11 @@ jobs:
 
           ../qt_source/configure \
               -prefix $QT_TOOLCHAIN_DIR \
-              -nomake tests -nomake examples \
-              -no-dbus -no-gui -no-widgets -no-sql-sqlite -no-icu -no-feature-network \
-              -no-opengl
+              -submodules qtbase,qtnetwork,qtsql,qtwebsockets \
+               ${build_option_qt} \
+              -no-icu \
+              -nomake tests \
+              -nomake examples
 
           echo "----------------- BUILD (HOST) ------------------"
           cmake --build . --parallel
