@@ -214,28 +214,40 @@ jobs:
 
       - name: Copy dependencies to release/
         env:
-          dependency_libs: libpython3.10.so.1.0 libpng16.so.16 libjpeg.so.8 libcrypt.so.1 libcrypto.so.1.1 libz.so.1 libssl.so.1.1 libpcre2-16.so.0 libQt6Gui.so.6 libQt6Network.so.6 libQt6Widgets.so.6 libk5crypto.so.3 libatomic.so.1 libQt6Core.so.6 libkrb5support.so.0 libcom_err.so.3 libstdc++.so.6 libkrb5.so.3 libQt6Sql.so.6 libgssapi_krb5.so.2 libQt6SerialPort.so.6 libQt6WebSockets.so.6 libusb-1.0.so.0 libftdi1.so.2 libudev.so.1
-
+          dependency_libs: >
+            libpython3.10.so.1.0 libpng16.so.16 libjpeg.so.8 libcrypt.so.1 libcrypto.so.1.1 libz.so.1 libssl.so.1.1 libpcre2-16.so.0 libQt6Gui.so.6 libQt6Network.so.6 libQt6Widgets.so.6 libk5crypto.so.3 libatomic.so.1 libQt6Core.so.6 libkrb5support.so.0 libcom_err.so.3 libstdc++.so.6 libkrb5.so.3 libQt6Sql.so.6 libgssapi_krb5.so.2 libQt6SerialPort.so.6 libQt6WebSockets.so.6 libusb-1.0.so.0 libftdi1.so.2 libudev.so.1
         run: |
-          for i in ${{ env.dependency_libs }}; do find ${TOOLCHAIN_DIR}/arm-webos-linux-gnueabi/sysroot/ -name $i -exec cp {} ./release/ \;; done
+          echo "------------------ FIND AND COPY DEPENDED LIBS --------------------"
+          for i in $dependency_libs; do
+              found=$(find "${TOOLCHAIN_DIR}/arm-webos-linux-gnueabi/sysroot/" -name "$i" -print -quit)
+              if [ -n "$found" ]; then
+                  cp -v "$found" ./release/
+              else
+                  echo "⚠️ Warning: $i not found, could not copy!"
+              fi
+          done
+
+          echo "----------------- VERIFY LIBS NEEDED BY HYPERHDR ------------------"
+          if file ./release/hyperhdr | grep -q ELF; then
+              for lib in $(readelf -d ./release/hyperhdr 2>/dev/null | grep NEEDED | awk -F'[][]' '{print $2}'); do
+                  if [ ! -f "./release/$lib" ]; then
+                      echo "⚠️ Warning: hyperhdr needs $lib but it is missing in ./release. If it's a sysroot's core system library, you can ignore it."
+                  fi
+              done
+          fi
+
           mkdir -p ./release/tls
-          cp ${TOOLCHAIN_DIR}/arm-webos-linux-gnueabi/sysroot/usr/lib/qt6/plugins/tls/libqopensslbackend.so ./release/tls/
-          mkdir -p ./release/sqldrivers
-          mkdir -p ./release/imageformats
-          mkdir -p ./release/python/lib
-          cp -t ./release/sqldrivers -- "${TOOLCHAIN_DIR}/arm-webos-linux-gnueabi/sysroot/usr/lib/qt/plugins/sqldrivers/libqsqlite.so"
-          cp -t ./release/imageformats -- "${TOOLCHAIN_DIR}/arm-webos-linux-gnueabi/sysroot/usr/lib/qt/plugins/imageformats/libqico.so"
-          cp -t ./release/imageformats -- "${TOOLCHAIN_DIR}/arm-webos-linux-gnueabi/sysroot/usr/lib/qt/plugins/imageformats/libqjpeg.so"
-          cp -r -t ./release/python/lib -- "${TOOLCHAIN_DIR}/arm-webos-linux-gnueabi/sysroot/usr/lib/python3.10"
+          cp $SYSROOT/usr/local/qt6/plugins/tls/libqopensslbackend.so ./release/tls/
+
+          echo "-------------------- FINAL ./release CONTENT ----------------------"
           find ./release
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: hyperion.ng-build
-          path: ${{ github.workspace }}/hyperion.ng/release/*
+          name: hyperhdr-build
+          path: ${{ github.workspace }}/hyperhdr-repo/release/*
           if-no-files-found: error
-
   build_ipk:
     runs-on: ubuntu-latest
     needs: build_hyperion_ng
