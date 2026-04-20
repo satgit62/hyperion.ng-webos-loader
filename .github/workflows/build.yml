@@ -57,7 +57,7 @@ jobs:
         if: steps.cache-toolchain.outputs.cache-hit != 'true'
         run: |
           mkdir -p /opt/qt_build
-          git clone --branch v${QT_VERSION} --depth 1 https://github.com /opt/qt_build/qt_source
+          git clone --branch v${QT_VERSION} --depth 1 https://github.com/qt/qtbase.git /opt/qt_build/qt_source
           
           # --- HOST BUILD (für Tools wie uic, moc) ---
           mkdir -p /opt/qt_build/host && cd /opt/qt_build/host
@@ -92,7 +92,7 @@ jobs:
 
           # --- ADD-ON MODULES ---
           for mod in qtserialport qtwebsockets qtimageformats; do
-            git clone --branch v${QT_VERSION} --depth 1 https://github.com /opt/qt_build/$mod
+            git clone --branch v${QT_VERSION} --depth 1 https://github.com/qt/qtwebsockets.git /opt/qt_build/$mod
             mkdir -p /opt/qt_build/$mod/build && cd /opt/qt_build/$mod/build
             cmake -DCMAKE_TOOLCHAIN_FILE="${{ env.TOOLCHAIN_FILE }}" -DQT_HOST_PATH="${{ env.QT_TOOLCHAIN_DIR }}" \
                   -DCMAKE_PREFIX_PATH="${{ env.SYSROOT }}/usr/local/qt6" -DCMAKE_INSTALL_PREFIX="${{ env.SYSROOT }}/usr/local/qt6" ..
