@@ -109,7 +109,7 @@ jobs:
                 -DCMAKE_PREFIX_PATH="${{ env.SYSROOT }}/usr/local/qt6" \
                 -DIMPORT_EXECUTABLES=${{ env.QT_TOOLCHAIN_DIR }}/lib/cmake/Qt6CoreTools/Qt6CoreToolsConfig.cmake \
                 -DBUILD_TESTS=OFF \
-	              -DENABLE_PROFILER=OFF \
+	            -DENABLE_PROFILER=OFF \
                 -DPLATFORM=rpi \
                 -DENABLE_DEV_FTDI=ON \
                 -DHYPERION_LIGHT=ON \
