@@ -83,7 +83,6 @@ jobs:
           cmake /opt/qt_build/qt_source \
             -DCMAKE_TOOLCHAIN_FILE=${{ env.TOOLCHAIN_FILE }} \
             -DQT_HOST_PATH=${{ env.QT_TOOLCHAIN_DIR }} \
-            -DCMAKE_PREFIX_PATH="${{ env.QT_TOOLCHAIN_DIR }};${{ env.QT_TOOLCHAIN_DIR }}/lib/cmake/Qt6" \
             -DCMAKE_INSTALL_PREFIX=/usr/local/qt6 \
             -DCMAKE_STAGING_PREFIX=${{ env.SYSROOT }}/usr/local/qt6 \
             -DCMAKE_BUILD_TYPE=Release \
@@ -95,8 +94,13 @@ jobs:
             -DQT_FEATURE_sql=ON \
             -DFEATURE_sql_sqlite=ON \
             -DQT_FEATURE_opengl=OFF \
-            -GNinja
+            -GNinja \
+            -DQt6CoreTools_DIR=${{ env.QT_TOOLCHAIN_DIR }}/lib/cmake/Qt6CoreTools \
+            -DQt6WidgetsTools_DIR=${{ env.QT_TOOLCHAIN_DIR }}/lib/cmake/Qt6WidgetsTools \
+            -DQt6GuiTools_DIR=${{ env.QT_TOOLCHAIN_DIR }}/lib/cmake/Qt6GuiTools \
+            -DQt6DBusTools_DIR=${{ env.QT_TOOLCHAIN_DIR }}/lib/cmake/Qt6DBusTools
           ninja install
+
 
           # --- 4. ADD-ON MODULES ---
           for mod in qtserialport qtwebsockets qtimageformats; do
