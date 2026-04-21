@@ -79,7 +79,15 @@ jobs:
           cd /opt/qt_build/qt_source
           mkdir -p mkspecs/devices/linux-webos-g++
           cp -r ${{ env.TOOLCHAIN_DIR }}/mkspecs/devices/linux-buildroot-g++ mkspecs/devices/linux-webos-g++
+          
+          # Patch 1: Aarch64 Plugin Loader Fix (hast du bereits)
           sed -i '1i#define EM_AARCH64 183' src/corelib/plugin/qelfparser_p.cpp
+          
+          # Patch 2: Fix für f_flags Fehler (statfs64 Fallback)
+          # Wir ersetzen die Prüfung von f_flags durch eine sicherere Variante oder setzen readOnly fest auf false, 
+          # da Hyperion selten auf Read-Only Mounts angewiesen ist, die statfs-Prüfung aber den Build blockiert.
+          sed -i 's/readOnly = (statfs_buf.f_flags \& ST_RDONLY) != 0;/readOnly = false; \/\/ Patched for WebOS Toolchain/' src/corelib/io/qstorageinfo_linux.cpp
+
                     
           # --- 3. CROSS BUILD (ARMv7) ---
           mkdir -p /opt/qt_build/base_cross && cd /opt/qt_build/base_cross
