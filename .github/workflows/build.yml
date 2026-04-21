@@ -59,7 +59,7 @@ jobs:
           mkdir -p /opt/qt_build
           git clone --branch v${QT_VERSION} --depth 1 https://github.com/qt/qtbase.git /opt/qt_build/qt_source
           
-          # --- 1. HOST BUILD (Ohne OpenGL, um Fehler zu vermeiden) ---
+          # --- 1. HOST BUILD (Minimal für Tools, ohne OpenGL & X11 Tests) ---
           mkdir -p /opt/qt_build/host && cd /opt/qt_build/host
           cmake /opt/qt_build/qt_source \
             -DCMAKE_INSTALL_PREFIX=${{ env.QT_TOOLCHAIN_DIR }} \
@@ -69,10 +69,17 @@ jobs:
             -DQT_FEATURE_widgets=ON \
             -DQT_FEATURE_network=ON \
             -DQT_FEATURE_opengl=OFF \
+            -DQT_FEATURE_png=ON \
+            -DQT_FEATURE_jpeg=ON \
             -DQT_BUILD_TESTS=OFF \
             -DQT_BUILD_EXAMPLES=OFF \
+            -DQT_FEATURE_xcb=OFF \
+            -DQT_FEATURE_xlib=OFF \
+            -DFEATURE_egl=OFF \
+            -DFEATURE_glx=OFF \
             -GNinja
           ninja install
+
 
           # --- 2. CROSS BUILD PREPARATION ---
           cd /opt/qt_build/qt_source
