@@ -57,7 +57,7 @@ jobs:
         if: steps.cache-toolchain.outputs.cache-hit != 'true'
         run: |
           mkdir -p /opt/qt_build
-          git clone --branch v${QT_VERSION} --depth 1 https://github.com /opt/qt_build/qt_source
+          git clone --branch v${QT_VERSION} --depth 1 https://github.com/qt/qtbase.git /opt/qt_build/qt_source
           
           # --- 1. HOST BUILD ---
           mkdir -p /opt/qt_build/host && cd /opt/qt_build/host
