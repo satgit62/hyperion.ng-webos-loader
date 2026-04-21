@@ -61,8 +61,7 @@ jobs:
           
           # --- HOST BUILD (für Tools wie uic, moc) ---
           mkdir -p /opt/qt_build/host && cd /opt/qt_build/host
-          ../qt_source/configure -prefix ${{ env.QT_TOOLCHAIN_DIR }} -nomake tests -nomake examples \
-            -gui -widgets -no-dbus -no-icu -no-opengl -feature-network -sql-sqlite
+          ../qt_source/configure -prefix ${{ env.QT_TOOLCHAIN_DIR }} -dbus-linked -gui -widgets -feature-network -sql-sqlite -qt-sqlite -no-opengl
           cmake --build . --parallel $(nproc)
           cmake --install .
 
