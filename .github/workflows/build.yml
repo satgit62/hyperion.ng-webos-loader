@@ -78,20 +78,21 @@ jobs:
           for mod in qtserialport qtwebsockets qtimageformats; do
             echo "Building module: $mod"
             
-            # WICHTIG: Die URL muss https://github.com{mod}.git lauten
-            git clone --branch v${QT_VERSION} --depth 1 "https://github.com{mod}.git" "/opt/qt_build/${mod}"
+            # KORREKTUR: Mit /qt/ Pfad und dem wichtigen $ Zeichen vor {mod}
+            git clone --branch "v${QT_VERSION}" --depth 1 "https://github.com/qt/${mod}.git" "/opt/qt_build/${mod}"
             
             mkdir -p "/opt/qt_build/${mod}/build" && cd "/opt/qt_build/${mod}/build"
             
             cmake .. \
-              -DCMAKE_TOOLCHAIN_FILE=${{ env.TOOLCHAIN_FILE }} \
-              -DQT_HOST_PATH=${{ env.QT_TOOLCHAIN_DIR }} \
+              -DCMAKE_TOOLCHAIN_FILE="${{ env.TOOLCHAIN_FILE }}" \
+              -DQT_HOST_PATH="${{ env.QT_TOOLCHAIN_DIR }}" \
               -DCMAKE_PREFIX_PATH="${{ env.SYSROOT }}/usr/local/qt6" \
-              -DCMAKE_INSTALL_PREFIX=/usr/local/qt6 \
-              -DCMAKE_STAGING_PREFIX=${{ env.SYSROOT }}/usr/local/qt6 \
+              -DCMAKE_INSTALL_PREFIX="/usr/local/qt6" \
+              -DCMAKE_STAGING_PREFIX="${{ env.SYSROOT }}/usr/local/qt6" \
               -GNinja
             ninja install
           done
+
 
 
 
@@ -114,6 +115,24 @@ jobs:
           cp -P ${{ env.SYSROOT }}/usr/local/qt6/plugins/sqldrivers/libqsqlite.so ./release/lib/plugins/sqldrivers/
           cp -P ${{ env.SYSROOT }}/usr/local/qt6/plugins/imageformats/libqico.so ./release/lib/plugins/imageformats/
           cp -P ${{ env.SYSROOT }}/usr/local/qt6/plugins/imageformats/libqjpeg.so ./release/lib/plugins/imageformats/
+
+      - name: "Staging: Copy Binaries and Qt6 Add-ons"
+        run: |
+          # 1. Hyperion Binaries kopieren
+          cp -r -T -- "./hyperion.ng/${{ env.BUILD_DIR }}/bin" ./release/
+
+          # 2. Qt6 Add-on Bibliotheken kopieren (SerialPort, WebSockets, etc.)
+          # Wir suchen im neuen Qt6-Installationspfad
+          cp -P ${{ env.SYSROOT }}/usr/local/qt6/lib/libQt6SerialPort.so* ./release/lib/
+          cp -P ${{ env.SYSROOT }}/usr/local/qt6/lib/libQt6WebSockets.so* ./release/lib/
+          
+          # 3. Falls Plugins für ImageFormats gebaut wurden
+          mkdir -p ./release/lib/plugins/imageformats
+          cp -P ${{ env.SYSROOT }}/usr/local/qt6/plugins/imageformats/*.so ./release/lib/plugins/imageformats/ 2>/dev/null || true
+
+          echo "Staging abgeschlossen. Inhalt von release/lib:"
+          ls ./release/lib
+
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
