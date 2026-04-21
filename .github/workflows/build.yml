@@ -57,25 +57,25 @@ jobs:
         if: steps.cache-toolchain.outputs.cache-hit != 'true'
         run: |
           mkdir -p /opt/qt_build
-          git clone --branch v${QT_VERSION} --depth 1 https://github.com/qt/qtbase.git /opt/qt_build/qt_source
+          git clone --branch v${QT_VERSION} --depth 1 https://github.com /opt/qt_build/qt_source
           
-          # --- 1. HOST BUILD (Tools & Base) ---
-          # Wir bauen hier beides zusammen, aber sagen Qt, dass es keinen externen Host-Pfad braucht
+          # --- 1. HOST BUILD (Minimal) ---
           mkdir -p /opt/qt_build/host && cd /opt/qt_build/host
+          # WICHTIG: -DQT_BUILD_INTERNALS_RELOCATABLE_INSTALL=OFF hilft bei Pfadproblemen
           cmake /opt/qt_build/qt_source \
             -DCMAKE_INSTALL_PREFIX=${{ env.QT_TOOLCHAIN_DIR }} \
             -DCMAKE_BUILD_TYPE=Release \
-            -DQT_BUILD_TOOLS_ONLY=OFF \
+            -DQT_BUILD_INTERNALS_RELOCATABLE_INSTALL=OFF \
             -DQT_FEATURE_gui=OFF \
             -DQT_FEATURE_opengl=OFF \
             -DQT_FEATURE_dbus=ON \
             -DQT_BUILD_TESTS=OFF \
             -DQT_BUILD_EXAMPLES=OFF \
-            -DQT_HOST_PATH=${{ env.QT_TOOLCHAIN_DIR }} \
             -GNinja
           ninja install
 
           # --- 2. CROSS BUILD PREPARATION ---
+          # (Hier bleiben deine Patches und cp Befehle gleich)
           cd /opt/qt_build/qt_source
           mkdir -p mkspecs/devices/linux-webos-g++
           cp -r ${{ env.TOOLCHAIN_DIR }}/mkspecs/devices/linux-buildroot-g++ mkspecs/devices/linux-webos-g++
@@ -83,6 +83,7 @@ jobs:
                     
           # --- 3. CROSS BUILD (ARMv7) ---
           mkdir -p /opt/qt_build/base_cross && cd /opt/qt_build/base_cross
+          # Hier ist QT_HOST_PATH nun korrekt, da Phase 1 installiert ist
           cmake /opt/qt_build/qt_source \
             -DCMAKE_TOOLCHAIN_FILE=${{ env.TOOLCHAIN_FILE }} \
             -DQT_HOST_PATH=${{ env.QT_TOOLCHAIN_DIR }} \
@@ -94,8 +95,6 @@ jobs:
             -DQT_FEATURE_dbus=ON \
             -DQT_FEATURE_gui=ON \
             -DQT_FEATURE_widgets=ON \
-            -DQT_FEATURE_sql=ON \
-            -DFEATURE_sql_sqlite=ON \
             -DQT_FEATURE_opengl=OFF \
             -GNinja
           ninja install
