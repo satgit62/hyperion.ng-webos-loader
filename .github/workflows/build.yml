@@ -56,11 +56,10 @@ jobs:
       - name: "Build QT6 (Host & Cross)"
         if: steps.cache-toolchain.outputs.cache-hit != 'true'
         run: |
-          # 0. Vorbereitung der Verzeichnisse mit Schreibrechten
           sudo mkdir -p /opt/qt_build ${{ env.QT_TOOLCHAIN_DIR }}
           sudo chown -R $USER:$USER /opt/qt_build ${{ env.QT_TOOLCHAIN_DIR }}
           
-          git clone --branch v${QT_VERSION} --depth 1 https://github.com/qt/qtbase.git /opt/qt_build/qt_source
+          git clone --branch v${QT_VERSION} --depth 1 https://github.com /opt/qt_build/qt_source
           
           # --- 1. HOST BUILD ---
           mkdir -p /opt/qt_build/host && cd /opt/qt_build/host
@@ -73,21 +72,14 @@ jobs:
             -DQT_BUILD_TESTS=OFF \
             -DQT_BUILD_EXAMPLES=OFF \
             -GNinja
-          ninja install # Installiert die Tools nach ${{ env.QT_TOOLCHAIN_DIR }}
+          ninja install
 
           # --- 2. CROSS BUILD PREPARATION ---
           cd /opt/qt_build/qt_source
           mkdir -p mkspecs/devices/linux-webos-g++
           cp -r ${{ env.TOOLCHAIN_DIR }}/mkspecs/devices/linux-buildroot-g++ mkspecs/devices/linux-webos-g++
-          
-          # Patch 1: Aarch64 Plugin Loader Fix (hast du bereits)
           sed -i '1i#define EM_AARCH64 183' src/corelib/plugin/qelfparser_p.cpp
-          
-          # Patch 2: Fix für f_flags Fehler (statfs64 Fallback)
-          # Wir ersetzen die Prüfung von f_flags durch eine sicherere Variante oder setzen readOnly fest auf false, 
-          # da Hyperion selten auf Read-Only Mounts angewiesen ist, die statfs-Prüfung aber den Build blockiert.
-          sed -i 's/readOnly = (statfs_buf.f_flags \& ST_RDONLY) != 0;/readOnly = false; \/\/ Patched for WebOS Toolchain/' src/corelib/io/qstorageinfo_linux.cpp
-
+          sed -i 's/readOnly = (statfs_buf.f_flags \& ST_RDONLY) != 0;/readOnly = false;/' src/corelib/io/qstorageinfo_linux.cpp
                     
           # --- 3. CROSS BUILD (ARMv7) ---
           mkdir -p /opt/qt_build/base_cross && cd /opt/qt_build/base_cross
@@ -112,17 +104,14 @@ jobs:
             -DQt6GuiTools_DIR=${{ env.QT_TOOLCHAIN_DIR }}/lib/cmake/Qt6GuiTools
           ninja install
 
-
           # --- 4. ADD-ON MODULES ---
+          # Hier nutzen wir eine explizite Liste für die Shell-Schleife
           for mod in qtserialport qtwebsockets qtimageformats; do
-            echo "Building module: $mod"
+            echo "Processing module: $mod"
+            # WICHTIG: Die URL muss genau so aussehen:
+            git clone --branch v${QT_VERSION} --depth 1 "https://github.com{mod}.git" "/opt/qt_build/${mod}"
             
-            # HIER ist das /qt/ in der URL (WICHTIG für git clone)
-            git clone --branch v${QT_VERSION} --depth 1 https://github.com{mod}.git /opt/qt_build/$mod
-            
-            # HIER bauen wir im lokalen Ordner (ohne extra /qt/ Unterordner)
-            mkdir -p /opt/qt_build/$mod/build && cd /opt/qt_build/$mod/build
-            
+            mkdir -p "/opt/qt_build/${mod}/build" && cd "/opt/qt_build/${mod}/build"
             cmake .. \
               -DCMAKE_TOOLCHAIN_FILE=${{ env.TOOLCHAIN_FILE }} \
               -DQT_HOST_PATH=${{ env.QT_TOOLCHAIN_DIR }} \
