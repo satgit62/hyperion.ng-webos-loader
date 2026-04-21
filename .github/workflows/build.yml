@@ -53,13 +53,24 @@ jobs:
           cd ${{ env.TOOLCHAIN_DIR }}
           ./relocate-sdk.sh
 
-      - name: "Build QT6 (Host & Cross)"
+            - name: "Build QT6 (Host & Cross)"
         if: steps.cache-toolchain.outputs.cache-hit != 'true'
         run: |
           mkdir -p /opt/qt_build
           git clone --branch v${QT_VERSION} --depth 1 https://github.com/qt/qtbase.git /opt/qt_build/qt_source
           
-          # --- 1. HOST BUILD (Minimaler System-Build ohne GUI/OpenGL) ---
+          # --- 1. HOST BUILD PART A (Nur Build-System Tools wie syncqt) ---
+          mkdir -p /opt/qt_build/host_tools && cd /opt/qt_build/host_tools
+          cmake /opt/qt_build/qt_source \
+            -DCMAKE_INSTALL_PREFIX=${{ env.QT_TOOLCHAIN_DIR }} \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DQT_FORCE_BUILD_TOOLS=ON \
+            -DQT_BUILD_TESTS=OFF \
+            -DQT_BUILD_EXAMPLES=OFF \
+            -GNinja
+          ninja src_tools_syncqt_install || true # Installiert syncqt separat
+          
+          # --- 1. HOST BUILD PART B (Moc, Uic, Rcc & DBus Tools) ---
           mkdir -p /opt/qt_build/host && cd /opt/qt_build/host
           cmake /opt/qt_build/qt_source \
             -DCMAKE_INSTALL_PREFIX=${{ env.QT_TOOLCHAIN_DIR }} \
@@ -69,7 +80,6 @@ jobs:
             -DQT_FEATURE_dbus=ON \
             -DQT_BUILD_TESTS=OFF \
             -DQT_BUILD_EXAMPLES=OFF \
-            -DQT_FORCE_CONFIGURE_TESTS=ON \
             -GNinja
           ninja install
 
@@ -78,7 +88,8 @@ jobs:
           mkdir -p mkspecs/devices/linux-webos-g++
           cp -r ${{ env.TOOLCHAIN_DIR }}/mkspecs/devices/linux-buildroot-g++ mkspecs/devices/linux-webos-g++
           sed -i '1i#define EM_AARCH64 183' src/corelib/plugin/qelfparser_p.cpp
-          
+                    
+
           # --- 3. CROSS BUILD (ARMv7) ---
           mkdir -p /opt/qt_build/base_cross && cd /opt/qt_build/base_cross
           cmake /opt/qt_build/qt_source \
