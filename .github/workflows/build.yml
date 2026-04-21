@@ -154,6 +154,7 @@ jobs:
                 -GNinja
           ninja
 
+      
       - name: "Staging: Copy binaries and dependencies"
         env:
           dependency_libs: >-
@@ -191,5 +192,4 @@ jobs:
         with:
           name: hyperion.ng-webos-binaries
           path: ./release/*
-
-          path: hyperion.ng/${{ env.BUILD_DIR }}/output_staging/*
+n.ng/${{ env.BUILD_DIR }}/output_staging/*
