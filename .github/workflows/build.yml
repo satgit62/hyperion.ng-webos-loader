@@ -153,14 +153,43 @@ jobs:
                 -DENABLE_DEPLOY_DEPENDENCIES=OFF \
                 -GNinja
           ninja
-          
-          # Staging für Upload
-          DESTDIR=./output_staging ninja install
-          mkdir -p ./output_staging/usr/local/share/hyperion/lib
-          cp -P ${{ env.SYSROOT }}/usr/local/qt6/lib/libQt6*.so* ./output_staging/usr/local/share/hyperion/lib/ || true
+
+      - name: "Staging: Copy binaries and dependencies"
+        env:
+          dependency_libs: >-
+            libpython3.10.so.1.0 libpng16.so.16 libjpeg.so.8 libcrypt.so.1 libcrypto.so.1.1 
+            libz.so.1 libssl.so.1.1 libpcre2-16.so.0 libk5crypto.so.3 libatomic.so.1 
+            libkrb5support.so.0 libcom_err.so.3 libstdc++.so.6 libkrb5.so.3 
+            libgssapi_krb5.so.2 libusb-1.0.so.0 libftdi1.so.2 libudev.so.1
+          qt_libs: >-
+            libQt6Gui.so.6 libQt6Network.so.6 libQt6Widgets.so.6 
+            libQt6Core.so.6 libQt6Sql.so.6 libQt6SerialPort.so.6 libQt6WebSockets.so.6
+        run: |
+          mkdir -p ./release/lib/plugins/sqldrivers
+          mkdir -p ./release/lib/plugins/imageformats
+
+          # 1. Hyperion Binaries
+          cp -r -T -- "./hyperion.ng/${{ env.BUILD_DIR }}/bin" ./release/
+
+          # 2. System-Libs
+          for lib in ${{ env.dependency_libs }}; do
+            find "${{ env.SYSROOT }}/usr/lib/" -name "${lib}" -exec cp -P -t ./release/lib -- {} +
+          done
+
+          # 3. Qt6-Libs
+          for lib in ${{ env.qt_libs }}; do
+            find "${{ env.SYSROOT }}/usr/local/qt6/lib/" -name "${lib}*" -exec cp -P -t ./release/lib -- {} +
+          done
+
+          # 4. Plugins
+          cp -P ${{ env.SYSROOT }}/usr/local/qt6/plugins/sqldrivers/libqsqlite.so ./release/lib/plugins/sqldrivers/
+          cp -P ${{ env.SYSROOT }}/usr/local/qt6/plugins/imageformats/libqico.so ./release/lib/plugins/imageformats/
+          cp -P ${{ env.SYSROOT }}/usr/local/qt6/plugins/imageformats/libqjpeg.so ./release/lib/plugins/imageformats/
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: hyperion.ng-webos-binaries
+          path: ./release/*
+
           path: hyperion.ng/${{ env.BUILD_DIR }}/output_staging/*
