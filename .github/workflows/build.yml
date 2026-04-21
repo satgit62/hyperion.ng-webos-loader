@@ -100,42 +100,62 @@ jobs:
         run: |
           mkdir -p hyperion.ng/${{ env.BUILD_DIR }}
           cd hyperion.ng/${{ env.BUILD_DIR }}
-          cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=${{ env.TOOLCHAIN_FILE }} -DQT_HOST_PATH=${{ env.QT_TOOLCHAIN_DIR }} -DCMAKE_PREFIX_PATH="${{ env.SYSROOT }}/usr/local/qt6" -DPLATFORM=rpi -DENABLE_QT=ON -DENABLE_DEPLOY_DEPENDENCIES=OFF -GNinja
+          cmake .. \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_TOOLCHAIN_FILE=${{ env.TOOLCHAIN_FILE }} \
+            -DQT_HOST_PATH=${{ env.QT_TOOLCHAIN_DIR }} \
+            -DCMAKE_PREFIX_PATH="${{ env.SYSROOT }}/usr/local/qt6" \
+            -DPython3_EXECUTABLE="${{ env.TOOLCHAIN_DIR }}/bin/python3" \
+            -DPLATFORM=rpi \
+            -DENABLE_QT=ON \
+            -DENABLE_DRM=OFF \
+            -DENABLE_DISPMANX=OFF \
+            -DENABLE_X11=OFF \
+            -DENABLE_AUDIO=OFF \
+            -DENABLE_DEPLOY_DEPENDENCIES=OFF \
+            -DENABLE_JSONCHECKS=ON \
+            -GNinja
           ninja
 
-      - name: "Staging: Copy Dependencies"
+      - name: "Staging: Collect Binaries and Dependencies"
         env:
-          dependency_libs: "libpython3.10.so.1.0 libpng16.so.16 libjpeg.so.8 libcrypt.so.1 libcrypto.so.1.1 libz.so.1 libssl.so.1.1 libpcre2-16.so.0 libk5crypto.so.3 libatomic.so.1 libkrb5support.so.0 libcom_err.so.3 libstdc++.so.6 libkrb5.so.3 libgssapi_krb5.so.2 libusb-1.0.so.0 libftdi1.so.2 libudev.so.1"
-          qt_libs: "libQt6Gui.so.6 libQt6Network.so.6 libQt6Widgets.so.6 libQt6Core.so.6 libQt6Sql.so.6 libQt6SerialPort.so.6 libQt6WebSockets.so.6"
+          dependency_libs: >-
+            libpython3.10.so.1.0 libpng16.so.16 libjpeg.so.8 libcrypt.so.1 libcrypto.so.1.1 
+            libz.so.1 libssl.so.1.1 libpcre2-16.so.0 libk5crypto.so.3 libatomic.so.1 
+            libkrb5support.so.0 libcom_err.so.3 libstdc++.so.6 libkrb5.so.3 
+            libgssapi_krb5.so.2 libusb-1.0.so.0 libftdi1.so.2 libudev.so.1
+          qt_libs: >-
+            libQt6Gui.so.6 libQt6Network.so.6 libQt6Widgets.so.6 
+            libQt6Core.so.6 libQt6Sql.so.6 libQt6SerialPort.so.6 libQt6WebSockets.so.6
         run: |
-          mkdir -p ./release/lib/plugins/sqldrivers ./release/lib/plugins/imageformats
-          cp -r -T -- "./hyperion.ng/${{ env.BUILD_DIR }}/bin" ./release/
-          for lib in ${{ env.dependency_libs }}; do find "${{ env.SYSROOT }}/usr/lib/" -name "${lib}" -exec cp -P -t ./release/lib -- {} +; done
-          for lib in ${{ env.qt_libs }}; do find "${{ env.SYSROOT }}/usr/local/qt6/lib/" -name "${lib}*" -exec cp -P -t ./release/lib -- {} +; done
-          cp -P ${{ env.SYSROOT }}/usr/local/qt6/plugins/sqldrivers/libqsqlite.so ./release/lib/plugins/sqldrivers/
-          cp -P ${{ env.SYSROOT }}/usr/local/qt6/plugins/imageformats/libqico.so ./release/lib/plugins/imageformats/
-          cp -P ${{ env.SYSROOT }}/usr/local/qt6/plugins/imageformats/libqjpeg.so ./release/lib/plugins/imageformats/
-
-      - name: "Staging: Copy Binaries and Qt6 Add-ons"
-        run: |
-          # 1. Hyperion Binaries kopieren
-          cp -r -T -- "./hyperion.ng/${{ env.BUILD_DIR }}/bin" ./release/
-
-          # 2. Qt6 Add-on Bibliotheken kopieren (SerialPort, WebSockets, etc.)
-          # Wir suchen im neuen Qt6-Installationspfad
-          cp -P ${{ env.SYSROOT }}/usr/local/qt6/lib/libQt6SerialPort.so* ./release/lib/
-          cp -P ${{ env.SYSROOT }}/usr/local/qt6/lib/libQt6WebSockets.so* ./release/lib/
-          
-          # 3. Falls Plugins für ImageFormats gebaut wurden
+          # 1. Zielstruktur vorbereiten
+          mkdir -p ./release/bin
+          mkdir -p ./release/lib/plugins/sqldrivers
           mkdir -p ./release/lib/plugins/imageformats
-          cp -P ${{ env.SYSROOT }}/usr/local/qt6/plugins/imageformats/*.so ./release/lib/plugins/imageformats/ 2>/dev/null || true
 
-          echo "Staging abgeschlossen. Inhalt von release/lib:"
-          ls ./release/lib
+          # 2. Hyperion Binärdateien kopieren
+          cp -v ./hyperion.ng/${{ env.BUILD_DIR }}/bin/hyperion* ./release/bin/
 
+          # 3. System-Abhängigkeiten aus dem Sysroot kopieren
+          for lib in ${{ env.dependency_libs }}; do
+            find "${{ env.SYSROOT }}/usr/lib/" -name "${lib}" -exec cp -P -v -t ./release/lib -- {} +
+          done
+
+          # 4. Qt6-Bibliotheken kopieren (inkl. Symlinks)
+          for lib in ${{ env.qt_libs }}; do
+            find "${{ env.SYSROOT }}/usr/local/qt6/lib/" -name "${lib}*" -exec cp -P -v -t ./release/lib -- {} +
+          done
+
+          # 5. Qt6 Plugins kopieren
+          cp -P -v ${{ env.SYSROOT }}/usr/local/qt6/plugins/sqldrivers/libqsqlite.so ./release/lib/plugins/sqldrivers/
+          cp -P -v ${{ env.SYSROOT }}/usr/local/qt6/plugins/imageformats/libqico.so ./release/lib/plugins/imageformats/
+          cp -P -v ${{ env.SYSROOT }}/usr/local/qt6/plugins/imageformats/libqjpeg.so ./release/lib/plugins/imageformats/
+
+          echo "Staging abgeschlossen. Struktur der Release-Datei:"
+          find ./release -maxdepth 2
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: hyperion.ng-webos
+          name: hyperion-webos-bundle
           path: ./release/*
