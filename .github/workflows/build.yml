@@ -81,7 +81,7 @@ jobs:
             -device-option CROSS_COMPILE=${{ env.TOOLCHAIN_DIR }}/bin/arm-webos-linux-gnueabi- \
             -qt-host-path ${{ env.QT_TOOLCHAIN_DIR }} \
             -nomake tests -nomake examples \
-            -dbus-linked -gui -widgets -network -sql-sqlite -qt-sqlite -no-opengl \
+            -dbus-linked -gui -widgets -sql-sqlite -qt-sqlite -no-opengl \
             -- -DCMAKE_TOOLCHAIN_FILE=${{ env.TOOLCHAIN_FILE }} \
             -DQt6CoreTools_DIR=${{ env.QT_TOOLCHAIN_DIR }}/lib/cmake/Qt6CoreTools \
             -DQt6WidgetsTools_DIR=${{ env.QT_TOOLCHAIN_DIR }}/lib/cmake/Qt6WidgetsTools \
