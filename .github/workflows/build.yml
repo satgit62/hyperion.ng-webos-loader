@@ -59,7 +59,7 @@ jobs:
           mkdir -p /opt/qt_build
           git clone --branch v${QT_VERSION} --depth 1 https://github.com/qt/qtbase.git /opt/qt_build/qt_source
           
-          # --- 1. HOST BUILD ---
+          # --- 1. HOST BUILD (Ohne OpenGL, um Fehler zu vermeiden) ---
           mkdir -p /opt/qt_build/host && cd /opt/qt_build/host
           cmake /opt/qt_build/qt_source \
             -DCMAKE_INSTALL_PREFIX=${{ env.QT_TOOLCHAIN_DIR }} \
@@ -68,6 +68,7 @@ jobs:
             -DQT_FEATURE_gui=ON \
             -DQT_FEATURE_widgets=ON \
             -DQT_FEATURE_network=ON \
+            -DQT_FEATURE_opengl=OFF \
             -DQT_BUILD_TESTS=OFF \
             -DQT_BUILD_EXAMPLES=OFF \
             -GNinja
@@ -101,6 +102,7 @@ jobs:
           # --- 4. ADD-ON MODULES ---
           for mod in qtserialport qtwebsockets qtimageformats; do
             echo "Building module: $mod"
+            # Korrigierte URL:
             git clone --branch v${QT_VERSION} --depth 1 https://github.com{mod}.git /opt/qt_build/$mod
             mkdir -p /opt/qt_build/$mod/build && cd /opt/qt_build/$mod/build
             cmake .. \
