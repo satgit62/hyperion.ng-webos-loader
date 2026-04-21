@@ -57,7 +57,7 @@ jobs:
         if: steps.cache-toolchain.outputs.cache-hit != 'true'
         run: |
           mkdir -p /opt/qt_build
-          git clone --branch v${QT_VERSION} --depth 1 https://github.com /opt/qt_build/qt_source
+          git clone --branch v${QT_VERSION} --depth 1 https://github.com/qt/qtbase.git /opt/qt_build/qt_source
           
           # --- 1. HOST BUILD (Minimal) ---
           mkdir -p /opt/qt_build/host && cd /opt/qt_build/host
@@ -103,7 +103,7 @@ jobs:
           for mod in qtserialport qtwebsockets qtimageformats; do
             echo "Building module: $mod"
             # KORREKTUR: Hier war ein Fehler in der URL (Slash fehlte)
-            git clone --branch v${QT_VERSION} --depth 1 https://github.com{mod}.git /opt/qt_build/$mod
+            git clone --branch v${QT_VERSION} --depth 1 https://github.com/qt/qtwebsockets.git /opt/qt_build/$mod
             mkdir -p /opt/qt_build/$mod/build && cd /opt/qt_build/$mod/build
             cmake .. \
               -DCMAKE_TOOLCHAIN_FILE=${{ env.TOOLCHAIN_FILE }} \
