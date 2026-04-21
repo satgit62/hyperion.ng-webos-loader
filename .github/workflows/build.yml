@@ -116,8 +116,13 @@ jobs:
           # --- 4. ADD-ON MODULES ---
           for mod in qtserialport qtwebsockets qtimageformats; do
             echo "Building module: $mod"
+            
+            # HIER ist das /qt/ in der URL (WICHTIG für git clone)
             git clone --branch v${QT_VERSION} --depth 1 https://github.com{mod}.git /opt/qt_build/$mod
+            
+            # HIER bauen wir im lokalen Ordner (ohne extra /qt/ Unterordner)
             mkdir -p /opt/qt_build/$mod/build && cd /opt/qt_build/$mod/build
+            
             cmake .. \
               -DCMAKE_TOOLCHAIN_FILE=${{ env.TOOLCHAIN_FILE }} \
               -DQT_HOST_PATH=${{ env.QT_TOOLCHAIN_DIR }} \
