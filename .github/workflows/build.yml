@@ -97,8 +97,13 @@ jobs:
             -DQT_FEATURE_sql=ON \
             -DFEATURE_sql_sqlite=ON \
             -DQT_FEATURE_opengl=OFF \
-            -GNinja
+            -GNinja \
+            -DQt6CoreTools_DIR=${{ env.QT_TOOLCHAIN_DIR }}/lib/cmake/Qt6CoreTools \
+            -DQt6DBusTools_DIR=${{ env.QT_TOOLCHAIN_DIR }}/lib/cmake/Qt6DBusTools \
+            -DQt6WidgetsTools_DIR=${{ env.QT_TOOLCHAIN_DIR }}/lib/cmake/Qt6WidgetsTools \
+            -DQt6GuiTools_DIR=${{ env.QT_TOOLCHAIN_DIR }}/lib/cmake/Qt6GuiTools
           ninja install
+
 
           # --- 4. ADD-ON MODULES ---
           for mod in qtserialport qtwebsockets qtimageformats; do
