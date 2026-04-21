@@ -74,13 +74,26 @@ jobs:
           cmake /opt/qt_build/qt_source -DCMAKE_TOOLCHAIN_FILE=${{ env.TOOLCHAIN_FILE }} -DQT_HOST_PATH=${{ env.QT_TOOLCHAIN_DIR }} -DCMAKE_INSTALL_PREFIX=/usr/local/qt6 -DCMAKE_STAGING_PREFIX=${{ env.SYSROOT }}/usr/local/qt6 -DCMAKE_BUILD_TYPE=Release -DQT_FEATURE_dbus=ON -DQT_FEATURE_gui=ON -DQT_FEATURE_widgets=ON -DQT_FEATURE_opengl=OFF -GNinja -DQt6CoreTools_DIR=${{ env.QT_TOOLCHAIN_DIR }}/lib/cmake/Qt6CoreTools -DQt6DBusTools_DIR=${{ env.QT_TOOLCHAIN_DIR }}/lib/cmake/Qt6DBusTools -DQt6WidgetsTools_DIR=${{ env.QT_TOOLCHAIN_DIR }}/lib/cmake/Qt6WidgetsTools -DQt6GuiTools_DIR=${{ env.QT_TOOLCHAIN_DIR }}/lib/cmake/Qt6GuiTools
           ninja install
 
-          # 4. Add-ons
+          # --- 4. ADD-ON MODULES ---
           for mod in qtserialport qtwebsockets qtimageformats; do
-            git clone --branch v${QT_VERSION} --depth 1 "https://github.com{mod}.git" "/opt/qt_build/${mod}"
-            mkdir -p "/opt/qt_build/${mod}/build" && cd "/opt/qt_build/${mod}/build"
-            cmake .. -DCMAKE_TOOLCHAIN_FILE=${{ env.TOOLCHAIN_FILE }} -DQT_HOST_PATH=${{ env.QT_TOOLCHAIN_DIR }} -DCMAKE_PREFIX_PATH="${{ env.SYSROOT }}/usr/local/qt6" -DCMAKE_INSTALL_PREFIX=/usr/local/qt6 -DCMAKE_STAGING_PREFIX=${{ env.SYSROOT }}/usr/local/qt6 -GNinja
+            echo "Building module: $mod"
+            
+            # HIER ist das /qt/ in der URL (WICHTIG für git clone)
+            git clone --branch v${QT_VERSION} --depth 1 https://github.com{mod}.git /opt/qt_build/$mod
+            
+            # HIER bauen wir im lokalen Ordner (ohne extra /qt/ Unterordner)
+            mkdir -p /opt/qt_build/$mod/build && cd /opt/qt_build/$mod/build
+            
+            cmake .. \
+              -DCMAKE_TOOLCHAIN_FILE=${{ env.TOOLCHAIN_FILE }} \
+              -DQT_HOST_PATH=${{ env.QT_TOOLCHAIN_DIR }} \
+              -DCMAKE_PREFIX_PATH="${{ env.SYSROOT }}/usr/local/qt6" \
+              -DCMAKE_INSTALL_PREFIX=/usr/local/qt6 \
+              -DCMAKE_STAGING_PREFIX=${{ env.SYSROOT }}/usr/local/qt6 \
+              -GNinja
             ninja install
           done
+
 
       - name: "Build Hyperion.ng"
         run: |
