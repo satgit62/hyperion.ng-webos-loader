@@ -30,6 +30,12 @@ jobs:
           sudo apt update
           sudo apt install -y ccache git cmake build-essential flatbuffers-compiler ninja-build wget
 
+      - name: Install native dependencies
+        run: |
+          sudo apt update
+          # libdbus-1-dev ist zwingend erforderlich für Qt6DBusTools
+          sudo apt install -y ccache git cmake build-essential flatbuffers-compiler ninja-build wget libdbus-1-dev
+
       - name: Set up Environment
         run: |        
           echo "QT_TOOLCHAIN_DIR=$TOOLCHAIN_DIR/qt6-host" >> $GITHUB_ENV
@@ -61,7 +67,8 @@ jobs:
           
           # --- HOST BUILD (für Tools wie uic, moc) ---
           mkdir -p /opt/qt_build/host && cd /opt/qt_build/host
-          ../qt_source/configure -prefix ${{ env.QT_TOOLCHAIN_DIR }} -dbus-linked -gui -widgets -feature-network -sql-sqlite -qt-sqlite -no-opengl
+          ../qt_source/configure -prefix ${{ env.QT_TOOLCHAIN_DIR }} -dbus-linked -gui -widgets -feature-network -sql-sqlite -qt-sqlite -no-opengl \
+          -- -DQT_FEATURE_dbus=ON
           cmake --build . --parallel $(nproc)
           cmake --install .
 
@@ -84,7 +91,8 @@ jobs:
             -- -DCMAKE_TOOLCHAIN_FILE=${{ env.TOOLCHAIN_FILE }} \
             -DQt6CoreTools_DIR=${{ env.QT_TOOLCHAIN_DIR }}/lib/cmake/Qt6CoreTools \
             -DQt6WidgetsTools_DIR=${{ env.QT_TOOLCHAIN_DIR }}/lib/cmake/Qt6WidgetsTools \
-            -DQt6GuiTools_DIR=${{ env.QT_TOOLCHAIN_DIR }}/lib/cmake/Qt6GuiTools
+            -DQt6GuiTools_DIR=${{ env.QT_TOOLCHAIN_DIR }}/lib/cmake/Qt6GuiTools \
+            -DQt6DBusTools_DIR=${{ env.QT_TOOLCHAIN_DIR }}/lib/cmake/Qt6DBusTools
           
           cmake --build . --parallel $(nproc)
           cmake --install .
