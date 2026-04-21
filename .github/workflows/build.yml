@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
 
 env:
-  TOOLCHAIN_URL: https://github.com
+  TOOLCHAIN_URL: https://github.com/satgit62/buildroot-nc4/releases/download/webOS.0.1/arm-webos-linux-gnueabi_sdk-buildroot.tar.gz
   TOOLCHAIN_DIR: /opt/arm-webos-linux-gnueabi_sdk-buildroot
   TOOLCHAIN_ENV_FILE: /opt/arm-webos-linux-gnueabi_sdk-buildroot/environment-setup
   TOOLCHAIN_FILE: /opt/arm-webos-linux-gnueabi_sdk-buildroot/share/buildroot/toolchainfile.cmake
@@ -28,7 +28,7 @@ jobs:
       - name: Install native dependencies
         run: |
           sudo apt update
-          sudo apt install -y ccache git cmake build-essential flatbuffers-compiler ninja-build wget libdbus-1-dev libfontconfig1-dev libfreetype6-dev libx11-dev libxext-dev libxfixes-dev libxi-dev libxrender-dev libxcb1-dev
+          sudo apt install -y ccache git cmake build-essential flatbuffers-compiler ninja-build wget libdbus-1-dev
 
       - name: Set up Environment
         run: |        
@@ -41,7 +41,6 @@ jobs:
         with:
           path: ${{ env.TOOLCHAIN_DIR }}
           key: ${{ runner.os }}-toolchain-qt-${{ env.QT_VERSION }}-${{ hashFiles('**/workflow.yml') }}
-          restore-keys: ${{ runner.os }}-toolchain-qt-${{ env.QT_VERSION }}
 
       - name: Download and unpack toolchain      
         if: steps.cache-toolchain.outputs.cache-hit != 'true'
@@ -134,7 +133,7 @@ jobs:
                 -GNinja
           ninja
           
-          # Staging
+          # Staging für Upload
           DESTDIR=./output_staging ninja install
           mkdir -p ./output_staging/usr/local/share/hyperion/lib
           cp -P ${{ env.SYSROOT }}/usr/local/qt6/lib/libQt6*.so* ./output_staging/usr/local/share/hyperion/lib/ || true
@@ -142,5 +141,5 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: hyperion.ng-build
+          name: hyperion.ng-webos-binaries
           path: hyperion.ng/${{ env.BUILD_DIR }}/output_staging/*
