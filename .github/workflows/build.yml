@@ -78,11 +78,10 @@ jobs:
           for mod in qtserialport qtwebsockets qtimageformats; do
             echo "Building module: $mod"
             
-            # HIER ist das /qt/ in der URL (WICHTIG für git clone)
-            git clone --branch v${QT_VERSION} --depth 1 https://github.com{mod}.git /opt/qt_build/$mod
+            # WICHTIG: Die URL muss https://github.com{mod}.git lauten
+            git clone --branch v${QT_VERSION} --depth 1 "https://github.com{mod}.git" "/opt/qt_build/${mod}"
             
-            # HIER bauen wir im lokalen Ordner (ohne extra /qt/ Unterordner)
-            mkdir -p /opt/qt_build/$mod/build && cd /opt/qt_build/$mod/build
+            mkdir -p "/opt/qt_build/${mod}/build" && cd "/opt/qt_build/${mod}/build"
             
             cmake .. \
               -DCMAKE_TOOLCHAIN_FILE=${{ env.TOOLCHAIN_FILE }} \
@@ -93,6 +92,7 @@ jobs:
               -GNinja
             ninja install
           done
+
 
 
       - name: "Build Hyperion.ng"
