@@ -55,11 +55,15 @@ jobs:
 
       - name: "Build QT6 (Host & Cross)"
         if: steps.cache-toolchain.outputs.cache-hit != 'true'
+        # continue-on-error erlaubt es uns, nach einem Fehler Diagnose-Befehle auszuführen
+        continue-on-error: true
+        id: qt_build_step
         run: |
           mkdir -p /opt/qt_build
-          git clone --branch v${QT_VERSION} --depth 1 https://github.com/qt/qtbase.git /opt/qt_build/qt_source
+          git clone --branch v${QT_VERSION} --depth 1 https://github.com /opt/qt_build/qt_source
           
           # --- 1. HOST BUILD ---
+          echo "Starting Host Build..."
           mkdir -p /opt/qt_build/host && cd /opt/qt_build/host
           cmake /opt/qt_build/qt_source \
             -DCMAKE_INSTALL_PREFIX=${{ env.QT_TOOLCHAIN_DIR }} \
@@ -79,6 +83,7 @@ jobs:
           sed -i '1i#define EM_AARCH64 183' src/corelib/plugin/qelfparser_p.cpp
                     
           # --- 3. CROSS BUILD (ARMv7) ---
+          echo "Starting Cross Build..."
           mkdir -p /opt/qt_build/base_cross && cd /opt/qt_build/base_cross
           cmake /opt/qt_build/qt_source \
             -DCMAKE_TOOLCHAIN_FILE=${{ env.TOOLCHAIN_FILE }} \
@@ -100,6 +105,19 @@ jobs:
             -DQt6GuiTools_DIR=${{ env.QT_TOOLCHAIN_DIR }}/lib/cmake/Qt6GuiTools \
             -DQt6DBusTools_DIR=${{ env.QT_TOOLCHAIN_DIR }}/lib/cmake/Qt6DBusTools
           ninja install
+
+      - name: "Debug: Inspect Directory Structure on Error"
+        if: steps.qt_build_step.outcome == 'failure'
+        run: |
+          echo "Build failed. Inspecting host tool directories..."
+          echo "--- Content of QT_TOOLCHAIN_DIR ---"
+          ls -R ${{ env.QT_TOOLCHAIN_DIR }} | grep -E "Qt6CoreTools|syncqt|qdbus" || true
+          echo "--- Searching for Qt6CoreToolsConfig.cmake ---"
+          find ${{ env.QT_TOOLCHAIN_DIR }} -name "Qt6CoreToolsConfig.cmake"
+          echo "--- Searching for syncqt binary ---"
+          find ${{ env.QT_TOOLCHAIN_DIR }} -name "syncqt*"
+          # Workflow hart abbrechen, nachdem wir die Infos geloggt haben
+          exit 1
 
 
           # --- 4. ADD-ON MODULES ---
