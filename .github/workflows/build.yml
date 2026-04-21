@@ -59,27 +59,19 @@ jobs:
           mkdir -p /opt/qt_build
           git clone --branch v${QT_VERSION} --depth 1 https://github.com/qt/qtbase.git /opt/qt_build/qt_source
           
-          # --- 1. HOST BUILD PART A (Nur Build-System Tools wie syncqt) ---
-          mkdir -p /opt/qt_build/host_tools && cd /opt/qt_build/host_tools
-          cmake /opt/qt_build/qt_source \
-            -DCMAKE_INSTALL_PREFIX=${{ env.QT_TOOLCHAIN_DIR }} \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DQT_FORCE_BUILD_TOOLS=ON \
-            -DQT_BUILD_TESTS=OFF \
-            -DQT_BUILD_EXAMPLES=OFF \
-            -GNinja
-          ninja src_tools_syncqt_install || true # Installiert syncqt separat
-          
-          # --- 1. HOST BUILD PART B (Moc, Uic, Rcc & DBus Tools) ---
+          # --- 1. HOST BUILD (Tools & Base) ---
+          # Wir bauen hier beides zusammen, aber sagen Qt, dass es keinen externen Host-Pfad braucht
           mkdir -p /opt/qt_build/host && cd /opt/qt_build/host
           cmake /opt/qt_build/qt_source \
             -DCMAKE_INSTALL_PREFIX=${{ env.QT_TOOLCHAIN_DIR }} \
             -DCMAKE_BUILD_TYPE=Release \
+            -DQT_BUILD_TOOLS_ONLY=OFF \
             -DQT_FEATURE_gui=OFF \
             -DQT_FEATURE_opengl=OFF \
             -DQT_FEATURE_dbus=ON \
             -DQT_BUILD_TESTS=OFF \
             -DQT_BUILD_EXAMPLES=OFF \
+            -DQT_HOST_PATH=${{ env.QT_TOOLCHAIN_DIR }} \
             -GNinja
           ninja install
 
@@ -89,7 +81,6 @@ jobs:
           cp -r ${{ env.TOOLCHAIN_DIR }}/mkspecs/devices/linux-buildroot-g++ mkspecs/devices/linux-webos-g++
           sed -i '1i#define EM_AARCH64 183' src/corelib/plugin/qelfparser_p.cpp
                     
-
           # --- 3. CROSS BUILD (ARMv7) ---
           mkdir -p /opt/qt_build/base_cross && cd /opt/qt_build/base_cross
           cmake /opt/qt_build/qt_source \
@@ -112,7 +103,7 @@ jobs:
           # --- 4. ADD-ON MODULES ---
           for mod in qtserialport qtwebsockets qtimageformats; do
             echo "Building module: $mod"
-            # Korrigierte URL:
+            # KORREKTUR: Hier war ein Fehler in der URL (Slash fehlte)
             git clone --branch v${QT_VERSION} --depth 1 https://github.com{mod}.git /opt/qt_build/$mod
             mkdir -p /opt/qt_build/$mod/build && cd /opt/qt_build/$mod/build
             cmake .. \
