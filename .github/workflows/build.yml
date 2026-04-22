@@ -91,6 +91,9 @@ jobs:
       - name: Build Hyperion
         run: |
           cd hyperion.ng
+          # Patch anwenden
+          sed -i '/using FramebufferWrapper = QObject;/d' src/hyperiond/hyperiond.h
+          
           mkdir -p "${{ env.BUILD_DIR }}" && cd "${{ env.BUILD_DIR }}"
           cmake .. \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
@@ -101,6 +104,7 @@ jobs:
             -DPython3_EXECUTABLE="${{ env.TOOLCHAIN_DIR }}/bin/python3" \
             -DCMAKE_BUILD_TYPE=Release -DPLATFORM=rpi -DENABLE_QT=ON -DENABLE_CEC=OFF -DENABLE_DRM=OFF -DENABLE_DISPMANX=OFF -DENABLE_AUDIO=OFF -DENABLE_DEPLOY_DEPENDENCIES=OFF -GNinja
           ninja
+
 
       - name: "Staging: Copy binaries and dependencies"
         env:
