@@ -183,97 +183,102 @@ jobs:
   build_ipk:
     runs-on: ubuntu-latest
     needs: build_hyperion_ng
-
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
 
+      # 1. Download des richtigen Artifacts aus dem ersten Job
       - uses: actions/download-artifact@v4
         with:
-          name: hyperion.ng-build
+          name: hyperion.ng-webos-binaries
           path: hyperion.ng-build
 
       - name: Display structure of downloaded files
-        run: ls -R
+        run: ls -R hyperion.ng-build
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 14.x
 
+      # 2. Toolchain für den Service-Build bereitstellen
       - name: Restore toolchain cache
         id: cache-toolchain
         uses: actions/cache@v4
         with:
           path: ${{ env.TOOLCHAIN_DIR }}
-          key: ${{ runner.os }}-${{ env.TOOLCHAIN_URL }}
+          key: ${{ runner.os }}-toolchain-qt-${{ env.QT_VERSION }}
 
       - name: Install native dependencies
-        env:
-          apt_deps: cmake build-essential
         run: |
           sudo apt update
-          sudo apt install -y ${{ env.apt_deps }}
+          sudo apt install -y cmake build-essential
 
       - name: Reconfigure git to use HTTP authentication
         run: >
-          git config --global url."https://github.com/".insteadOf
-          ssh://git@github.com/
+          git config --global url."https://github.com".insteadOf
+          ssh://git@://github.com
 
+      # 3. Web-Interface und Service bauen
       - run: npm install
-      - run: npm run lint
       - run: npm run build -- --env production
+
       - name: Build service
         run: |
           mkdir -p ./service/build
-          pushd ./service/build
+          cd ./service/build
           cmake .. \
             -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_TOOLCHAIN_FILE="${TOOLCHAIN_FILE}"
+            -DCMAKE_TOOLCHAIN_FILE="${{ env.TOOLCHAIN_FILE }}"
           make
-          popd
+          cd ../..
           mkdir -p ./dist
           rm -rf ./dist/service
           cp -r -T -- ./service/build/dist ./dist/service
 
+      # 4. Hyperion (aus Job 1) in das Service-Verzeichnis kopieren
       - name: Copy hyperion.ng into dist/service/hyperion
         run: |
-          ls -R
           rm -rf ./dist/service/hyperion
+          mkdir -p ./dist/service/hyperion
           cp -r -T ./hyperion.ng-build ./dist/service/hyperion
+          # Aufräumen: flatc wird auf dem TV nicht benötigt
           rm -f ./dist/service/hyperion/flatc
-          ls -R
 
+      # 5. Berechtigungen setzen
       - name: Ensure executables +x
         run: |
           chmod +x ./dist/service/autostart.sh
           chmod +x ./dist/service/loader_service
           chmod +x ./dist/service/start_hyperiond
-
           chmod +x ./dist/service/hyperion/hyperiond
           chmod +x ./dist/service/hyperion/hyperion-remote
+          # Auch Bibliotheken im lib Ordner sollten lesbar sein
+          chmod -R +r ./dist/service/hyperion/lib
 
+      # 6. IPK Paketieren
       - run: npm run package
       - run: npm run gen-manifest
 
-      - name: Upload artifact
+      - name: Upload IPK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: hyperion.ng-ipk
           path: |
-            ${{github.workspace}}/*.ipk
+            ${{ github.workspace }}/*.ipk
 
+      # 7. Release-Erstellung (bei Master-Push oder Tags)
       - uses: marvinpinto/action-automatic-releases@latest
         if: "github.ref == 'refs/heads/master'"
         with:
           repo_token: "${{ secrets.GITHUB_TOKEN }}"
           automatic_release_tag: latest
           prerelease: true
-          title: "Development Build"
+          title: "Development Build (Qt6)"
           files: |
-            ${{github.workspace}}/*.ipk
-            ${{github.workspace}}/org.webosbrew.hyperion.ng.loader.manifest.json
+            ${{ github.workspace }}/*.ipk
+            ${{ github.workspace }}/org.webosbrew.hyperion.ng.loader.manifest.json
 
       - uses: marvinpinto/action-automatic-releases@latest
         if: "startsWith(github.ref, 'refs/tags/v')"
@@ -282,5 +287,5 @@ jobs:
           prerelease: false
           title: ${{ github.ref_name }}
           files: |
-            ${{github.workspace}}/*.ipk
-            ${{github.workspace}}/org.webosbrew.hyperion.ng.loader.manifest.json
+            ${{ github.workspace }}/*.ipk
+            ${{ github.workspace }}/org.webosbrew.hyperion.ng.loader.manifest.json
