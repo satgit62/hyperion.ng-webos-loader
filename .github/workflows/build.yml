@@ -144,9 +144,16 @@ jobs:
           cp -r -T -- "./${{ env.BUILD_DIR }}/bin" ./release
           find ./release
 
+      - name: Copy built binaries to release/
+        run: |
+          rm -rf ./release
+          mkdir -p ./release/lib
+          # Kopiere die ausführbaren Dateien aus dem Unterordner
+          cp -r -T -- "./hyperion.ng/${{ env.BUILD_DIR }}/bin" ./release
+          find ./release
+
       - name: Copy dependencies to release/
         env:
-          # Qt6 Bibliotheken haben die Endung .so.6
           dependency_libs: >-
             libpython3.10.so.1.0 libpng16.so.16 libjpeg.so.8 libcrypt.so.1 libcrypto.so.1.1 
             libz.so.1 libssl.so.1.1 libpcre2-16.so.0 libk5crypto.so.3 libatomic.so.1 
@@ -160,22 +167,126 @@ jobs:
           mkdir -p ./release/lib/plugins/imageformats
           mkdir -p ./release/python/lib
 
-          # 1. Standard System-Abhängigkeiten kopieren
+          # 1. Standard System-Abhängigkeiten
           for i in ${{ env.dependency_libs }}; do 
-            find "${TOOLCHAIN_DIR}/arm-webos-linux-gnueabi/sysroot/usr/lib/" -name "${i}" -exec cp -P -t ./release/lib -- {} +; 
+            find "${{ env.TOOLCHAIN_DIR }}/arm-webos-linux-gnueabi/sysroot/usr/lib/" -name "${i}" -exec cp -P -t ./release/lib -- {} +; 
           done
 
-          # 2. Qt6 Bibliotheken kopieren (aus unserem Custom-Pfad)
+          # 2. Qt6 Bibliotheken (aus dem Custom-Installationspfad)
           for i in ${{ env.qt6_libs }}; do 
-            find "${TOOLCHAIN_DIR}/arm-webos-linux-gnueabi/sysroot/usr/local/qt6/lib/" -name "${i}*" -exec cp -P -t ./release/lib -- {} +; 
+            find "${{ env.TOOLCHAIN_DIR }}/arm-webos-linux-gnueabi/sysroot/usr/local/qt6/lib/" -name "${i}*" -exec cp -P -t ./release/lib -- {} +; 
           done
 
-          # 3. Qt6 Plugins kopieren
-          cp -P ${TOOLCHAIN_DIR}/arm-webos-linux-gnueabi/sysroot/usr/local/qt6/plugins/sqldrivers/libqsqlite.so ./release/lib/plugins/sqldrivers/
-          cp -P ${TOOLCHAIN_DIR}/arm-webos-linux-gnueabi/sysroot/usr/local/qt6/plugins/imageformats/libqico.so ./release/lib/plugins/imageformats/
-          cp -P ${TOOLCHAIN_DIR}/arm-webos-linux-gnueabi/sysroot/usr/local/qt6/plugins/imageformats/libqjpeg.so ./release/lib/plugins/imageformats/
+          # 3. Qt6 Plugins
+          cp -P ${{ env.TOOLCHAIN_DIR }}/arm-webos-linux-gnueabi/sysroot/usr/local/qt6/plugins/sqldrivers/libqsqlite.so ./release/lib/plugins/sqldrivers/
+          cp -P ${{ env.TOOLCHAIN_DIR }}/arm-webos-linux-gnueabi/sysroot/usr/local/qt6/plugins/imageformats/libqico.so ./release/lib/plugins/imageformats/
+          cp -P ${{ env.TOOLCHAIN_DIR }}/arm-webos-linux-gnueabi/sysroot/usr/local/qt6/plugins/imageformats/libqjpeg.so ./release/lib/plugins/imageformats/
 
-          # 4. Python Libs kopieren
-          cp -r -t ./release/python/lib -- "${TOOLCHAIN_DIR}/arm-webos-linux-gnueabi/sysroot/usr/lib/python3.10"
+          # 4. Python Libs
+          cp -r -t ./release/python/lib -- "${{ env.TOOLCHAIN_DIR }}/arm-webos-linux-gnueabi/sysroot/usr/lib/python3.10"/* 2>/dev/null || true
           
           find ./release
+  build_ipk:
+    runs-on: ubuntu-latest
+    needs: build_hyperion_ng
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: hyperion.ng-build
+          path: hyperion.ng-build
+
+      - name: Display structure of downloaded files
+        run: ls -R
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 14.x
+
+      - name: Restore toolchain cache
+        id: cache-toolchain
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.TOOLCHAIN_DIR }}
+          key: ${{ runner.os }}-${{ env.TOOLCHAIN_URL }}
+
+      - name: Install native dependencies
+        env:
+          apt_deps: cmake build-essential
+        run: |
+          sudo apt update
+          sudo apt install -y ${{ env.apt_deps }}
+
+      - name: Reconfigure git to use HTTP authentication
+        run: >
+          git config --global url."https://github.com/".insteadOf
+          ssh://git@github.com/
+
+      - run: npm install
+      - run: npm run lint
+      - run: npm run build -- --env production
+      - name: Build service
+        run: |
+          mkdir -p ./service/build
+          pushd ./service/build
+          cmake .. \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_TOOLCHAIN_FILE="${TOOLCHAIN_FILE}"
+          make
+          popd
+          mkdir -p ./dist
+          rm -rf ./dist/service
+          cp -r -T -- ./service/build/dist ./dist/service
+
+      - name: Copy hyperion.ng into dist/service/hyperion
+        run: |
+          ls -R
+          rm -rf ./dist/service/hyperion
+          cp -r -T ./hyperion.ng-build ./dist/service/hyperion
+          rm -f ./dist/service/hyperion/flatc
+          ls -R
+
+      - name: Ensure executables +x
+        run: |
+          chmod +x ./dist/service/autostart.sh
+          chmod +x ./dist/service/loader_service
+          chmod +x ./dist/service/start_hyperiond
+
+          chmod +x ./dist/service/hyperion/hyperiond
+          chmod +x ./dist/service/hyperion/hyperion-remote
+
+      - run: npm run package
+      - run: npm run gen-manifest
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: hyperion.ng-ipk
+          path: |
+            ${{github.workspace}}/*.ipk
+
+      - uses: marvinpinto/action-automatic-releases@latest
+        if: "github.ref == 'refs/heads/master'"
+        with:
+          repo_token: "${{ secrets.GITHUB_TOKEN }}"
+          automatic_release_tag: latest
+          prerelease: true
+          title: "Development Build"
+          files: |
+            ${{github.workspace}}/*.ipk
+            ${{github.workspace}}/org.webosbrew.hyperion.ng.loader.manifest.json
+
+      - uses: marvinpinto/action-automatic-releases@latest
+        if: "startsWith(github.ref, 'refs/tags/v')"
+        with:
+          repo_token: "${{ secrets.GITHUB_TOKEN }}"
+          prerelease: false
+          title: ${{ github.ref_name }}
+          files: |
+            ${{github.workspace}}/*.ipk
+            ${{github.workspace}}/org.webosbrew.hyperion.ng.loader.manifest.json
