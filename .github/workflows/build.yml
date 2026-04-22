@@ -100,15 +100,18 @@ jobs:
         env:
           CCACHE_DIR: ${{ github.workspace }}/${{ env.CCACHE_DIR }}
         run: |
-          mkdir -p -- "./${{ env.BUILD_DIR }}"
-          pushd -- "./${{ env.BUILD_DIR }}"
+          # Wechsel in das Verzeichnis, in das Hyperion geklont wurde
+          cd hyperion.ng
+          mkdir -p "${{ env.BUILD_DIR }}"
+          cd "${{ env.BUILD_DIR }}"
+          
           cmake .. \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
-            -DCMAKE_TOOLCHAIN_FILE="${TOOLCHAIN_FILE}" \
-            -DQT_HOST_PATH="${QT_TOOLCHAIN_DIR}" \
-            -DCMAKE_PREFIX_PATH="${SYSROOT}/usr/local/qt6" \
-            -DPython3_EXECUTABLE="${TOOLCHAIN_DIR}/bin/python3" \
+            -DCMAKE_TOOLCHAIN_FILE="${{ env.TOOLCHAIN_FILE }}" \
+            -DQT_HOST_PATH="${{ env.QT_TOOLCHAIN_DIR }}" \
+            -DCMAKE_PREFIX_PATH="${{ env.SYSROOT }}/usr/local/qt6" \
+            -DPython3_EXECUTABLE="${{ env.TOOLCHAIN_DIR }}/bin/python3" \
             -DCMAKE_BUILD_TYPE=Release \
             -DPLATFORM=rpi \
             -DENABLE_QT=ON \
@@ -132,7 +135,7 @@ jobs:
             -DENABLE_FLATBUF_CONNECT=ON \
             -G Ninja
           ninja
-          popd
+
 
       - name: Copy built binaries to release/
         run: |
