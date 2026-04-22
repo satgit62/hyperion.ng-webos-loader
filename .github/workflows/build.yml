@@ -140,13 +140,6 @@ jobs:
       - name: Copy built binaries to release/
         run: |
           rm -rf ./release
-          mkdir -p ./release
-          cp -r -T -- "./${{ env.BUILD_DIR }}/bin" ./release
-          find ./release
-
-      - name: Copy built binaries to release/
-        run: |
-          rm -rf ./release
           mkdir -p ./release/lib
           # Kopiere die ausführbaren Dateien aus dem Unterordner
           cp -r -T -- "./hyperion.ng/${{ env.BUILD_DIR }}/bin" ./release
@@ -186,6 +179,7 @@ jobs:
           cp -r -t ./release/python/lib -- "${{ env.TOOLCHAIN_DIR }}/arm-webos-linux-gnueabi/sysroot/usr/lib/python3.10"/* 2>/dev/null || true
           
           find ./release
+
   build_ipk:
     runs-on: ubuntu-latest
     needs: build_hyperion_ng
