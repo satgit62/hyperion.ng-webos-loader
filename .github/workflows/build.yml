@@ -1,4 +1,4 @@
-name: WebOS-Build (Qt6 Lean)
+name: WebOS-Build (Qt6)
 on:
   push:
   pull_request:
@@ -10,6 +10,7 @@ env:
   TOOLCHAIN_FILE: /opt/arm-webos-linux-gnueabi_sdk-buildroot/share/buildroot/toolchainfile.cmake
   BUILD_DIR: build
   QT_VERSION: "6.8.3"
+  CCACHE_DIR: ${{ github.workspace }}/.ccache
 
 jobs:
   build_hyperion_ng:
@@ -40,6 +41,13 @@ jobs:
           path: ${{ env.TOOLCHAIN_DIR }}
           key: ${{ runner.os }}-toolchain-qt-${{ env.QT_VERSION }}
 
+      - name: Cache ccache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ${{ runner.os }}-ccache-${{ github.sha }}
+          restore-keys: ${{ runner.os }}-ccache-
+
       - name: Download and unpack toolchain      
         if: steps.cache-toolchain.outputs.cache-hit != 'true'
         run: |
@@ -49,6 +57,9 @@ jobs:
           tar xf toolchain.tar.gz -C /opt
           cd ${{ env.TOOLCHAIN_DIR }}
           ./relocate-sdk.sh
+          # Bereinigen um Cache zu verkleinern
+          rm -rf share/doc share/man
+          find . -name "*.a" -type f -delete
 
       - name: "Build QT6 (Host & Cross)"
         if: steps.cache-toolchain.outputs.cache-hit != 'true'
@@ -74,35 +85,18 @@ jobs:
           cmake /opt/qt_build/qt_source -DCMAKE_TOOLCHAIN_FILE=${{ env.TOOLCHAIN_FILE }} -DQT_HOST_PATH=${{ env.QT_TOOLCHAIN_DIR }} -DCMAKE_INSTALL_PREFIX=/usr/local/qt6 -DCMAKE_STAGING_PREFIX=${{ env.SYSROOT }}/usr/local/qt6 -DCMAKE_BUILD_TYPE=Release -DQT_FEATURE_dbus=ON -DQT_FEATURE_gui=ON -DQT_FEATURE_widgets=ON -DQT_FEATURE_opengl=OFF -GNinja -DQt6CoreTools_DIR=${{ env.QT_TOOLCHAIN_DIR }}/lib/cmake/Qt6CoreTools -DQt6DBusTools_DIR=${{ env.QT_TOOLCHAIN_DIR }}/lib/cmake/Qt6DBusTools -DQt6WidgetsTools_DIR=${{ env.QT_TOOLCHAIN_DIR }}/lib/cmake/Qt6WidgetsTools -DQt6GuiTools_DIR=${{ env.QT_TOOLCHAIN_DIR }}/lib/cmake/Qt6GuiTools
           ninja install
 
-          # --- 4. ADD-ON MODULES ---
+          # 4. Add-ons
           for mod in qtserialport qtwebsockets qtimageformats; do
-            echo "Building module: $mod"
-            
-            # KORREKTUR: Mit /qt/ Pfad und dem wichtigen $ Zeichen vor {mod}
             git clone --branch "v${QT_VERSION}" --depth 1 "https://github.com/qt/${mod}.git" "/opt/qt_build/${mod}"
-            
             mkdir -p "/opt/qt_build/${mod}/build" && cd "/opt/qt_build/${mod}/build"
-            
-            cmake .. \
-              -DCMAKE_TOOLCHAIN_FILE="${{ env.TOOLCHAIN_FILE }}" \
-              -DQT_HOST_PATH="${{ env.QT_TOOLCHAIN_DIR }}" \
-              -DCMAKE_PREFIX_PATH="${{ env.SYSROOT }}/usr/local/qt6" \
-              -DCMAKE_INSTALL_PREFIX="/usr/local/qt6" \
-              -DCMAKE_STAGING_PREFIX="${{ env.SYSROOT }}/usr/local/qt6" \
-              -GNinja
+            cmake .. -DCMAKE_TOOLCHAIN_FILE="${{ env.TOOLCHAIN_FILE }}" -DQT_HOST_PATH="${{ env.QT_TOOLCHAIN_DIR }}" -DCMAKE_PREFIX_PATH="${{ env.SYSROOT }}/usr/local/qt6" -DCMAKE_INSTALL_PREFIX="/usr/local/qt6" -DCMAKE_STAGING_PREFIX="${{ env.SYSROOT }}/usr/local/qt6" -GNinja
             ninja install
           done
 
-
       - name: Build Hyperion
-        env:
-          CCACHE_DIR: ${{ github.workspace }}/${{ env.CCACHE_DIR }}
         run: |
-          # Wechsel in das Verzeichnis, in das Hyperion geklont wurde
           cd hyperion.ng
-          mkdir -p "${{ env.BUILD_DIR }}"
-          cd "${{ env.BUILD_DIR }}"
-          
+          mkdir -p "${{ env.BUILD_DIR }}" && cd "${{ env.BUILD_DIR }}"
           cmake .. \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
@@ -110,38 +104,8 @@ jobs:
             -DQT_HOST_PATH="${{ env.QT_TOOLCHAIN_DIR }}" \
             -DCMAKE_PREFIX_PATH="${{ env.SYSROOT }}/usr/local/qt6" \
             -DPython3_EXECUTABLE="${{ env.TOOLCHAIN_DIR }}/bin/python3" \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DPLATFORM=rpi \
-            -DENABLE_QT=ON \
-            -DENABLE_CEC=OFF \
-            -DENABLE_DEV_FTDI=ON \
-            -DHYPERION_LIGHT=ON \
-            -DENABLE_REMOTE_CTL=ON \
-            -DENABLE_AUDIO=OFF \
-            -DENABLE_EFFECTENGINE=ON \
-            -DENABLE_JSONCHECKS=ON \
-            -DENABLE_DEV_SERIAL=ON \
-            -DENABLE_DEV_USB_HID=ON \
-            -DENABLE_DEV_WS281XPWM=OFF \
-            -DENABLE_DEV_TINKERFORGE=ON \
-            -DENABLE_MDNS=ON \
-            -DENABLE_DEPLOY_DEPENDENCIES=OFF \
-            -DENABLE_BOBLIGHT_SERVER=ON \
-            -DENABLE_FLATBUF_SERVER=ON \
-            -DENABLE_PROTOBUF_SERVER=OFF \
-            -DENABLE_FORWARDER=ON \
-            -DENABLE_FLATBUF_CONNECT=ON \
-            -G Ninja
+            -DCMAKE_BUILD_TYPE=Release -DPLATFORM=rpi -DENABLE_QT=ON -DENABLE_CEC=OFF -DENABLE_AUDIO=OFF -DENABLE_DEPLOY_DEPENDENCIES=OFF -GNinja
           ninja
-
-
-      - name: Copy built binaries to release/
-        run: |
-          rm -rf ./release
-          mkdir -p ./release/lib
-          # Kopiere die ausführbaren Dateien aus dem Unterordner
-          cp -r -T -- "./hyperion.ng/${{ env.BUILD_DIR }}/bin" ./release
-          find ./release
 
       - name: "Staging: Copy binaries and dependencies"
         env:
@@ -156,12 +120,16 @@ jobs:
         run: |
           rm -rf ./release && mkdir -p ./release/sqldrivers ./release/imageformats ./release/python/lib
           cp -r -T -- "./hyperion.ng/${{ env.BUILD_DIR }}/bin" ./release
-          for i in ${{ env.dependency_libs }}; do find "${{ env.SYSROOT }}/usr/lib/" -name "${i}" -exec cp -P -t ./release -- {} +; done
+          # System Libs flach kopieren (Suche im gesamten Sysroot)
+          for i in ${{ env.dependency_libs }}; do find "${{ env.SYSROOT }}/" -name "${i}" -exec cp -P -t ./release -- {} +; done
+          # Qt6 Libs flach kopieren
           for i in ${{ env.qt6_libs }}; do find "${{ env.SYSROOT }}/usr/local/qt6/lib/" -name "${i}*" -exec cp -P -t ./release -- {} +; done
+          # Plugins & Python
           cp -P ${{ env.SYSROOT }}/usr/local/qt6/plugins/sqldrivers/libqsqlite.so ./release/sqldrivers/
           cp -P ${{ env.SYSROOT }}/usr/local/qt6/plugins/imageformats/libqico.so ./release/imageformats/
           cp -P ${{ env.SYSROOT }}/usr/local/qt6/plugins/imageformats/libqjpeg.so ./release/imageformats/
           cp -r -t ./release/python/lib -- "${{ env.SYSROOT }}/usr/lib/python3.10"/* 2>/dev/null || true
+          ls -F ./release
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -216,14 +184,3 @@ jobs:
         with:
           name: hyperion.ng-ipk
           path: ${{ github.workspace }}/*.ipk
-
-      - uses: marvinpinto/action-automatic-releases@latest
-        if: "github.ref == 'refs/heads/master'"
-        with:
-          repo_token: "${{ secrets.GITHUB_TOKEN }}"
-          automatic_release_tag: latest
-          prerelease: true
-          title: "Development Build (Qt6)"
-          files: |
-            ${{ github.workspace }}/*.ipk
-            ${{ github.workspace }}/org.webosbrew.hyperion.ng.loader.manifest.json
