@@ -96,66 +96,83 @@ jobs:
 
 
 
-      - name: "Build Hyperion.ng"
+      - name: Build Hyperion
+        env:
+          CCACHE_DIR: ${{ github.workspace }}/${{ env.CCACHE_DIR }}
         run: |
-          mkdir -p hyperion.ng/${{ env.BUILD_DIR }}
-          cd hyperion.ng/${{ env.BUILD_DIR }}
+          mkdir -p -- "./${{ env.BUILD_DIR }}"
+          pushd -- "./${{ env.BUILD_DIR }}"
           cmake .. \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_TOOLCHAIN_FILE="${TOOLCHAIN_FILE}" \
+            -DQT_HOST_PATH="${QT_TOOLCHAIN_DIR}" \
+            -DCMAKE_PREFIX_PATH="${SYSROOT}/usr/local/qt6" \
+            -DPython3_EXECUTABLE="${TOOLCHAIN_DIR}/bin/python3" \
             -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_TOOLCHAIN_FILE=${{ env.TOOLCHAIN_FILE }} \
-            -DQT_HOST_PATH=${{ env.QT_TOOLCHAIN_DIR }} \
-            -DCMAKE_PREFIX_PATH="${{ env.SYSROOT }}/usr/local/qt6" \
-            -DPython3_EXECUTABLE="${{ env.TOOLCHAIN_DIR }}/bin/python3" \
             -DPLATFORM=rpi \
             -DENABLE_QT=ON \
-            -DENABLE_DRM=OFF \
-            -DENABLE_DISPMANX=OFF \
-            -DENABLE_X11=OFF \
+            -DENABLE_CEC=OFF \
+            -DENABLE_DEV_FTDI=ON \
+            -DHYPERION_LIGHT=ON \
+            -DENABLE_REMOTE_CTL=ON \
             -DENABLE_AUDIO=OFF \
-            -DENABLE_DEPLOY_DEPENDENCIES=OFF \
+            -DENABLE_EFFECTENGINE=ON \
             -DENABLE_JSONCHECKS=ON \
-            -GNinja
+            -DENABLE_DEV_SERIAL=ON \
+            -DENABLE_DEV_USB_HID=ON \
+            -DENABLE_DEV_WS281XPWM=OFF \
+            -DENABLE_DEV_TINKERFORGE=ON \
+            -DENABLE_MDNS=ON \
+            -DENABLE_DEPLOY_DEPENDENCIES=OFF \
+            -DENABLE_BOBLIGHT_SERVER=ON \
+            -DENABLE_FLATBUF_SERVER=ON \
+            -DENABLE_PROTOBUF_SERVER=OFF \
+            -DENABLE_FORWARDER=ON \
+            -DENABLE_FLATBUF_CONNECT=ON \
+            -G Ninja
           ninja
+          popd
 
-      - name: "Staging: Collect Binaries and Dependencies"
+      - name: Copy built binaries to release/
+        run: |
+          rm -rf ./release
+          mkdir -p ./release
+          cp -r -T -- "./${{ env.BUILD_DIR }}/bin" ./release
+          find ./release
+
+      - name: Copy dependencies to release/
         env:
+          # Qt6 Bibliotheken haben die Endung .so.6
           dependency_libs: >-
             libpython3.10.so.1.0 libpng16.so.16 libjpeg.so.8 libcrypt.so.1 libcrypto.so.1.1 
             libz.so.1 libssl.so.1.1 libpcre2-16.so.0 libk5crypto.so.3 libatomic.so.1 
             libkrb5support.so.0 libcom_err.so.3 libstdc++.so.6 libkrb5.so.3 
             libgssapi_krb5.so.2 libusb-1.0.so.0 libftdi1.so.2 libudev.so.1
-          qt_libs: >-
-            libQt6Gui.so.6 libQt6Network.so.6 libQt6Widgets.so.6 
-            libQt6Core.so.6 libQt6Sql.so.6 libQt6SerialPort.so.6 libQt6WebSockets.so.6
+          qt6_libs: >-
+            libQt6Gui.so.6 libQt6Network.so.6 libQt6Widgets.so.6 libQt6Core.so.6 
+            libQt6Sql.so.6 libQt6SerialPort.so.6 libQt6WebSockets.so.6
         run: |
-          # 1. Zielstruktur vorbereiten
-          mkdir -p ./release/bin
           mkdir -p ./release/lib/plugins/sqldrivers
           mkdir -p ./release/lib/plugins/imageformats
+          mkdir -p ./release/python/lib
 
-          # 2. Hyperion Binärdateien kopieren
-          cp -v ./hyperion.ng/${{ env.BUILD_DIR }}/bin/hyperion* ./release/bin/
-
-          # 3. System-Abhängigkeiten aus dem Sysroot kopieren
-          for lib in ${{ env.dependency_libs }}; do
-            find "${{ env.SYSROOT }}/usr/lib/" -name "${lib}" -exec cp -P -v -t ./release/lib -- {} +
+          # 1. Standard System-Abhängigkeiten kopieren
+          for i in ${{ env.dependency_libs }}; do 
+            find "${TOOLCHAIN_DIR}/arm-webos-linux-gnueabi/sysroot/usr/lib/" -name "${i}" -exec cp -P -t ./release/lib -- {} +; 
           done
 
-          # 4. Qt6-Bibliotheken kopieren (inkl. Symlinks)
-          for lib in ${{ env.qt_libs }}; do
-            find "${{ env.SYSROOT }}/usr/local/qt6/lib/" -name "${lib}*" -exec cp -P -v -t ./release/lib -- {} +
+          # 2. Qt6 Bibliotheken kopieren (aus unserem Custom-Pfad)
+          for i in ${{ env.qt6_libs }}; do 
+            find "${TOOLCHAIN_DIR}/arm-webos-linux-gnueabi/sysroot/usr/local/qt6/lib/" -name "${i}*" -exec cp -P -t ./release/lib -- {} +; 
           done
 
-          # 5. Qt6 Plugins kopieren
-          cp -P -v ${{ env.SYSROOT }}/usr/local/qt6/plugins/sqldrivers/libqsqlite.so ./release/lib/plugins/sqldrivers/
-          cp -P -v ${{ env.SYSROOT }}/usr/local/qt6/plugins/imageformats/libqico.so ./release/lib/plugins/imageformats/
-          cp -P -v ${{ env.SYSROOT }}/usr/local/qt6/plugins/imageformats/libqjpeg.so ./release/lib/plugins/imageformats/
+          # 3. Qt6 Plugins kopieren
+          cp -P ${TOOLCHAIN_DIR}/arm-webos-linux-gnueabi/sysroot/usr/local/qt6/plugins/sqldrivers/libqsqlite.so ./release/lib/plugins/sqldrivers/
+          cp -P ${TOOLCHAIN_DIR}/arm-webos-linux-gnueabi/sysroot/usr/local/qt6/plugins/imageformats/libqico.so ./release/lib/plugins/imageformats/
+          cp -P ${TOOLCHAIN_DIR}/arm-webos-linux-gnueabi/sysroot/usr/local/qt6/plugins/imageformats/libqjpeg.so ./release/lib/plugins/imageformats/
 
-          echo "Staging abgeschlossen. Struktur der Release-Datei:"
-          find ./release -maxdepth 2
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: hyperion-webos-bundle
-          path: ./release/*
+          # 4. Python Libs kopieren
+          cp -r -t ./release/python/lib -- "${TOOLCHAIN_DIR}/arm-webos-linux-gnueabi/sysroot/usr/lib/python3.10"
+          
+          find ./release
