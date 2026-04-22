@@ -154,43 +154,20 @@ jobs:
             libQt6Gui.so.6 libQt6Network.so.6 libQt6Widgets.so.6 libQt6Core.so.6 
             libQt6Sql.so.6 libQt6SerialPort.so.6 libQt6WebSockets.so.6
         run: |
-          # 1. Zielverzeichnis leeren und neu aufbauen
-          rm -rf ./release
-          mkdir -p ./release/sqldrivers
-          mkdir -p ./release/imageformats
-          mkdir -p ./release/python/lib
-
-          # 2. Hyperion Binaries direkt nach /release kopieren
+          rm -rf ./release && mkdir -p ./release/sqldrivers ./release/imageformats ./release/python/lib
           cp -r -T -- "./hyperion.ng/${{ env.BUILD_DIR }}/bin" ./release
-
-          # 3. System-Abhängigkeiten direkt nach /release kopieren
-          for lib in ${{ env.dependency_libs }}; do 
-            find "${{ env.TOOLCHAIN_DIR }}/arm-webos-linux-gnueabi/sysroot/usr/lib/" -name "${lib}" -exec cp -P -t ./release -- {} +; 
-          done
-
-          # 4. Qt6 Bibliotheken direkt nach /release kopieren
-          for lib in ${{ env.qt6_libs }}; do 
-            find "${{ env.TOOLCHAIN_DIR }}/arm-webos-linux-gnueabi/sysroot/usr/local/qt6/lib/" -name "${lib}*" -exec cp -P -t ./release -- {} +; 
-          done
-
-          # 5. Qt6 Plugins in die Unterordner kopieren (Qt sucht relativ zur Core-Lib)
-          cp -P ${{ env.TOOLCHAIN_DIR }}/arm-webos-linux-gnueabi/sysroot/usr/local/qt6/plugins/sqldrivers/libqsqlite.so ./release/sqldrivers/
-          cp -P ${{ env.TOOLCHAIN_DIR }}/arm-webos-linux-gnueabi/sysroot/usr/local/qt6/plugins/imageformats/libqico.so ./release/imageformats/
-          cp -P ${{ env.TOOLCHAIN_DIR }}/arm-webos-linux-gnueabi/sysroot/usr/local/qt6/plugins/imageformats/libqjpeg.so ./release/imageformats/
-
-          # 6. Python Bibliotheken
-          cp -r -t ./release/python/lib -- "${{ env.TOOLCHAIN_DIR }}/arm-webos-linux-gnueabi/sysroot/usr/lib/python3.10"/* 2>/dev/null || true
-          
-          # Kontrolle
-          echo "Inhalt des release-Ordners:"
-          ls -F ./release
+          for i in ${{ env.dependency_libs }}; do find "${{ env.SYSROOT }}/usr/lib/" -name "${i}" -exec cp -P -t ./release -- {} +; done
+          for i in ${{ env.qt6_libs }}; do find "${{ env.SYSROOT }}/usr/local/qt6/lib/" -name "${i}*" -exec cp -P -t ./release -- {} +; done
+          cp -P ${{ env.SYSROOT }}/usr/local/qt6/plugins/sqldrivers/libqsqlite.so ./release/sqldrivers/
+          cp -P ${{ env.SYSROOT }}/usr/local/qt6/plugins/imageformats/libqico.so ./release/imageformats/
+          cp -P ${{ env.SYSROOT }}/usr/local/qt6/plugins/imageformats/libqjpeg.so ./release/imageformats/
+          cp -r -t ./release/python/lib -- "${{ env.SYSROOT }}/usr/lib/python3.10"/* 2>/dev/null || true
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: hyperion.ng-webos-binaries
           path: ./release/*
-          if-no-files-found: error
 
   build_ipk:
     runs-on: ubuntu-latest
@@ -199,70 +176,46 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
-
       - uses: actions/download-artifact@v4
         with:
           name: hyperion.ng-webos-binaries
           path: hyperion.ng-build
-
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 14.x
-
       - name: Restore toolchain cache
-        id: cache-toolchain
         uses: actions/cache@v4
         with:
           path: ${{ env.TOOLCHAIN_DIR }}
           key: ${{ runner.os }}-toolchain-qt-${{ env.QT_VERSION }}
-
       - name: Install native dependencies
-        run: |
-          sudo apt update
-          sudo apt install -y cmake build-essential
-
+        run: sudo apt update && sudo apt install -y cmake build-essential
       - run: npm install
       - run: npm run build -- --env production
-
       - name: Build service
         run: |
-          mkdir -p ./service/build
-          cd ./service/build
-          cmake .. \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_TOOLCHAIN_FILE="${{ env.TOOLCHAIN_FILE }}"
-          make
-          cd ../..
-          mkdir -p ./dist
-          rm -rf ./dist/service
-          cp -r -T -- ./service/build/dist ./dist/service
-
+          mkdir -p ./service/build && cd ./service/build
+          cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE="${{ env.TOOLCHAIN_FILE }}"
+          make && cd ../..
+          mkdir -p ./dist && rm -rf ./dist/service && cp -r -T -- ./service/build/dist ./dist/service
       - name: Copy hyperion.ng into dist/service/hyperion
         run: |
-          rm -rf ./dist/service/hyperion
-          mkdir -p ./dist/service/hyperion
+          rm -rf ./dist/service/hyperion && mkdir -p ./dist/service/hyperion
           cp -r -T ./hyperion.ng-build ./dist/service/hyperion
           rm -f ./dist/service/hyperion/flatc
-
       - name: Ensure executables +x
         run: |
-          chmod +x ./dist/service/autostart.sh
-          chmod +x ./dist/service/loader_service
-          chmod +x ./dist/service/start_hyperiond
-          chmod +x ./dist/service/hyperion/hyperiond
-          chmod +x ./dist/service/hyperion/hyperion-remote
-          chmod -R +r ./dist/service/hyperion/lib
-
+          chmod +x ./dist/service/autostart.sh ./dist/service/loader_service ./dist/service/start_hyperiond
+          chmod +x ./dist/service/hyperion/hyperiond ./dist/service/hyperion/hyperion-remote
+          chmod -R +r ./dist/service/hyperion
       - run: npm run package
       - run: npm run gen-manifest
-
       - name: Upload IPK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: hyperion.ng-ipk
-          path: |
-            ${{ github.workspace }}/*.ipk
+          path: ${{ github.workspace }}/*.ipk
 
       - uses: marvinpinto/action-automatic-releases@latest
         if: "github.ref == 'refs/heads/master'"
