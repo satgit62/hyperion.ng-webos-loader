@@ -94,8 +94,6 @@ jobs:
           done
 
 
-
-
       - name: Build Hyperion
         env:
           CCACHE_DIR: ${{ github.workspace }}/${{ env.CCACHE_DIR }}
@@ -145,7 +143,7 @@ jobs:
           cp -r -T -- "./hyperion.ng/${{ env.BUILD_DIR }}/bin" ./release
           find ./release
 
-      - name: Copy dependencies to release/
+      - name: "Staging: Copy binaries and dependencies"
         env:
           dependency_libs: >-
             libpython3.10.so.1.0 libpng16.so.16 libjpeg.so.8 libcrypt.so.1 libcrypto.so.1.1 
@@ -156,29 +154,36 @@ jobs:
             libQt6Gui.so.6 libQt6Network.so.6 libQt6Widgets.so.6 libQt6Core.so.6 
             libQt6Sql.so.6 libQt6SerialPort.so.6 libQt6WebSockets.so.6
         run: |
-          mkdir -p ./release/lib/plugins/sqldrivers
-          mkdir -p ./release/lib/plugins/imageformats
+          # 1. Zielverzeichnis leeren und neu aufbauen
+          rm -rf ./release
+          mkdir -p ./release/sqldrivers
+          mkdir -p ./release/imageformats
           mkdir -p ./release/python/lib
 
-          # 1. Standard System-Abhängigkeiten
-          for i in ${{ env.dependency_libs }}; do 
-            find "${{ env.TOOLCHAIN_DIR }}/arm-webos-linux-gnueabi/sysroot/usr/lib/" -name "${i}" -exec cp -P -t ./release/lib -- {} +; 
+          # 2. Hyperion Binaries direkt nach /release kopieren
+          cp -r -T -- "./hyperion.ng/${{ env.BUILD_DIR }}/bin" ./release
+
+          # 3. System-Abhängigkeiten direkt nach /release kopieren
+          for lib in ${{ env.dependency_libs }}; do 
+            find "${{ env.TOOLCHAIN_DIR }}/arm-webos-linux-gnueabi/sysroot/usr/lib/" -name "${lib}" -exec cp -P -t ./release -- {} +; 
           done
 
-          # 2. Qt6 Bibliotheken (aus dem Custom-Installationspfad)
-          for i in ${{ env.qt6_libs }}; do 
-            find "${{ env.TOOLCHAIN_DIR }}/arm-webos-linux-gnueabi/sysroot/usr/local/qt6/lib/" -name "${i}*" -exec cp -P -t ./release/lib -- {} +; 
+          # 4. Qt6 Bibliotheken direkt nach /release kopieren
+          for lib in ${{ env.qt6_libs }}; do 
+            find "${{ env.TOOLCHAIN_DIR }}/arm-webos-linux-gnueabi/sysroot/usr/local/qt6/lib/" -name "${lib}*" -exec cp -P -t ./release -- {} +; 
           done
 
-          # 3. Qt6 Plugins
-          cp -P ${{ env.TOOLCHAIN_DIR }}/arm-webos-linux-gnueabi/sysroot/usr/local/qt6/plugins/sqldrivers/libqsqlite.so ./release/lib/plugins/sqldrivers/
-          cp -P ${{ env.TOOLCHAIN_DIR }}/arm-webos-linux-gnueabi/sysroot/usr/local/qt6/plugins/imageformats/libqico.so ./release/lib/plugins/imageformats/
-          cp -P ${{ env.TOOLCHAIN_DIR }}/arm-webos-linux-gnueabi/sysroot/usr/local/qt6/plugins/imageformats/libqjpeg.so ./release/lib/plugins/imageformats/
+          # 5. Qt6 Plugins in die Unterordner kopieren (Qt sucht relativ zur Core-Lib)
+          cp -P ${{ env.TOOLCHAIN_DIR }}/arm-webos-linux-gnueabi/sysroot/usr/local/qt6/plugins/sqldrivers/libqsqlite.so ./release/sqldrivers/
+          cp -P ${{ env.TOOLCHAIN_DIR }}/arm-webos-linux-gnueabi/sysroot/usr/local/qt6/plugins/imageformats/libqico.so ./release/imageformats/
+          cp -P ${{ env.TOOLCHAIN_DIR }}/arm-webos-linux-gnueabi/sysroot/usr/local/qt6/plugins/imageformats/libqjpeg.so ./release/imageformats/
 
-          # 4. Python Libs
+          # 6. Python Bibliotheken
           cp -r -t ./release/python/lib -- "${{ env.TOOLCHAIN_DIR }}/arm-webos-linux-gnueabi/sysroot/usr/lib/python3.10"/* 2>/dev/null || true
           
-          find ./release
+          # Kontrolle
+          echo "Inhalt des release-Ordners:"
+          ls -F ./release
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
