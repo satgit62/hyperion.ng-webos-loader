@@ -1,11 +1,11 @@
-name: WebOS-Build (Qt6 Lean)
+name: WebOS-Build (Qt6)
 on:
   push:
   pull_request:
   workflow_dispatch:
 
 env:
-  TOOLCHAIN_URL: https://github.com/satgit62/buildroot-nc4/releases/download/webOS.0.1/arm-webos-linux-gnueabi_sdk-buildroot.tar.gz
+  TOOLCHAIN_URL: https://github.com/satgit62/buildroot-nc4/releases/download/webOS.0.4/arm-webos-linux-gnueabi_sdk-buildroot.tar.gz
   TOOLCHAIN_DIR: /opt/arm-webos-linux-gnueabi_sdk-buildroot
   TOOLCHAIN_FILE: /opt/arm-webos-linux-gnueabi_sdk-buildroot/share/buildroot/toolchainfile.cmake
   BUILD_DIR: build
