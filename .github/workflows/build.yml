@@ -180,6 +180,13 @@ jobs:
           
           find ./release
 
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: hyperion.ng-webos-binaries
+          path: ./release/*
+          if-no-files-found: error
+
   build_ipk:
     runs-on: ubuntu-latest
     needs: build_hyperion_ng
@@ -188,21 +195,16 @@ jobs:
         with:
           submodules: recursive
 
-      # 1. Download des richtigen Artifacts aus dem ersten Job
       - uses: actions/download-artifact@v4
         with:
           name: hyperion.ng-webos-binaries
           path: hyperion.ng-build
-
-      - name: Display structure of downloaded files
-        run: ls -R hyperion.ng-build
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 14.x
 
-      # 2. Toolchain für den Service-Build bereitstellen
       - name: Restore toolchain cache
         id: cache-toolchain
         uses: actions/cache@v4
@@ -215,12 +217,6 @@ jobs:
           sudo apt update
           sudo apt install -y cmake build-essential
 
-      - name: Reconfigure git to use HTTP authentication
-        run: >
-          git config --global url."https://github.com".insteadOf
-          ssh://git@://github.com
-
-      # 3. Web-Interface und Service bauen
       - run: npm install
       - run: npm run build -- --env production
 
@@ -237,16 +233,13 @@ jobs:
           rm -rf ./dist/service
           cp -r -T -- ./service/build/dist ./dist/service
 
-      # 4. Hyperion (aus Job 1) in das Service-Verzeichnis kopieren
       - name: Copy hyperion.ng into dist/service/hyperion
         run: |
           rm -rf ./dist/service/hyperion
           mkdir -p ./dist/service/hyperion
           cp -r -T ./hyperion.ng-build ./dist/service/hyperion
-          # Aufräumen: flatc wird auf dem TV nicht benötigt
           rm -f ./dist/service/hyperion/flatc
 
-      # 5. Berechtigungen setzen
       - name: Ensure executables +x
         run: |
           chmod +x ./dist/service/autostart.sh
@@ -254,10 +247,8 @@ jobs:
           chmod +x ./dist/service/start_hyperiond
           chmod +x ./dist/service/hyperion/hyperiond
           chmod +x ./dist/service/hyperion/hyperion-remote
-          # Auch Bibliotheken im lib Ordner sollten lesbar sein
           chmod -R +r ./dist/service/hyperion/lib
 
-      # 6. IPK Paketieren
       - run: npm run package
       - run: npm run gen-manifest
 
@@ -268,7 +259,6 @@ jobs:
           path: |
             ${{ github.workspace }}/*.ipk
 
-      # 7. Release-Erstellung (bei Master-Push oder Tags)
       - uses: marvinpinto/action-automatic-releases@latest
         if: "github.ref == 'refs/heads/master'"
         with:
@@ -276,16 +266,6 @@ jobs:
           automatic_release_tag: latest
           prerelease: true
           title: "Development Build (Qt6)"
-          files: |
-            ${{ github.workspace }}/*.ipk
-            ${{ github.workspace }}/org.webosbrew.hyperion.ng.loader.manifest.json
-
-      - uses: marvinpinto/action-automatic-releases@latest
-        if: "startsWith(github.ref, 'refs/tags/v')"
-        with:
-          repo_token: "${{ secrets.GITHUB_TOKEN }}"
-          prerelease: false
-          title: ${{ github.ref_name }}
           files: |
             ${{ github.workspace }}/*.ipk
             ${{ github.workspace }}/org.webosbrew.hyperion.ng.loader.manifest.json
