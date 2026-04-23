@@ -91,8 +91,6 @@ jobs:
       - name: Build Hyperion
         run: |
           cd hyperion.ng
-          # Patch anwenden
-          sed -i '/using FramebufferWrapper = QObject;/d' src/hyperiond/hyperiond.h
           
           mkdir -p "${{ env.BUILD_DIR }}" && cd "${{ env.BUILD_DIR }}"
           cmake .. \
@@ -102,8 +100,26 @@ jobs:
             -DQT_HOST_PATH="${{ env.QT_TOOLCHAIN_DIR }}" \
             -DCMAKE_PREFIX_PATH="${{ env.SYSROOT }}/usr/local/qt6" \
             -DPython3_EXECUTABLE="${{ env.TOOLCHAIN_DIR }}/bin/python3" \
-            -DCMAKE_BUILD_TYPE=Release -DPLATFORM=rpi -DENABLE_QT=ON -DENABLE_CEC=OFF -DENABLE_DRM=OFF -DENABLE_DISPMANX=OFF -DENABLE_AUDIO=OFF -DENABLE_DEPLOY_DEPENDENCIES=OFF -GNinja
-          ninja
+            -DCMAKE_BUILD_TYPE=Release \
+            -DPLATFORM=rpi \
+            -DENABLE_DEV_FTDI=ON \
+            -DHYPERION_LIGHT=ON \
+            -DENABLE_REMOTE_CTL=ON \
+            -DENABLE_AUDIO=OFF \
+            -DENABLE_EFFECTENGINE=ON \
+            -DENABLE_JSONCHECKS=ON \
+            -DENABLE_DEV_SERIAL=ON \
+            -DENABLE_DEV_USB_HID=ON \
+            -DENABLE_MDNS=ON \
+            -DENABLE_DEPLOY_DEPENDENCIES=OFF \
+            -DENABLE_BOBLIGHT_SERVER=ON \
+            -DENABLE_FLATBUF_SERVER=ON \
+            -DENABLE_PROTOBUF_SERVER=OFF \
+            -DENABLE_FORWARDER=ON \
+            -DENABLE_FLATBUF_CONNECT=ON \
+            -G Ninja
+          cmake --build .
+          popd
 
 
       - name: "Staging: Final Cleanup and Copy"
