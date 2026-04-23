@@ -121,9 +121,8 @@ jobs:
           ninja
 
 
-      - name: "Staging: Final Cleanup and Copy"
+      - name: "Staging: Correct webOS Structure"
         env:
-          # Liste der absolut notwendigen System-Abhängigkeiten
           dependency_libs: >-
             libpython3.10.so.1.0 libpng16.so.16 libjpeg.so.8 libcrypt.so.1 libcrypto.so.1.1 
             libz.so.1 libssl.so.1.1 libpcre2-16.so.0 libstdc++.so.6 libusb-1.0.so.0 
@@ -132,29 +131,33 @@ jobs:
             libQt6Gui.so.6 libQt6Network.so.6 libQt6Widgets.so.6 libQt6Core.so.6 
             libQt6Sql.so.6 libQt6SerialPort.so.6 libQt6WebSockets.so.6
         run: |
-          # 1. Verzeichnisstruktur frisch aufbauen
-          rm -rf ./release && mkdir -p ./release/sqldrivers ./release/imageformats ./release/python/lib
+          # 1. Struktur erstellen: bin für Programme, lib für Bibliotheken
+          rm -rf ./release
+          mkdir -p ./release/bin
+          mkdir -p ./release/lib/plugins/sqldrivers
+          mkdir -p ./release/lib/plugins/imageformats
+          mkdir -p ./release/python/lib
 
-          # 2. NUR die echten Hyperion-Binaries kopieren (kein protoc-Ballast!)
-          cp -P ./hyperion.ng/${{ env.BUILD_DIR }}/bin/hyperiond ./release/
-          cp -P ./hyperion.ng/${{ env.BUILD_DIR }}/bin/hyperion-remote ./release/
+          # 2. Programme in den bin-Ordner
+          cp -P ./hyperion.ng/${{ env.BUILD_DIR }}/bin/hyperiond ./release/bin/
+          cp -P ./hyperion.ng/${{ env.BUILD_DIR }}/bin/hyperion-remote ./release/bin/
 
-          # 3. System-Bibliotheken im gesamten Sysroot suchen und flach kopieren
+          # 3. System-Libs in den lib-Ordner
           for i in ${{ env.dependency_libs }}; do 
-            find "${{ env.SYSROOT }}/" -name "${i}" -exec cp -P -t ./release -- {} +; 
+            find "${{ env.SYSROOT }}/" -name "${i}" -exec cp -P -t ./release/lib -- {} +; 
           done
 
-          # 4. Qt6-Bibliotheken (Symlinks als Links erhalten mit -d)
+          # 4. Qt6-Libs in den lib-Ordner
           for i in ${{ env.qt6_libs }}; do 
-            cp -d ${{ env.SYSROOT }}/usr/local/qt6/lib/${i}* ./release/
+            find "${{ env.SYSROOT }}/usr/local/qt6/lib/" -name "${i}*" -exec cp -P -t ./release/lib -- {} +; 
           done
 
-          # 5. Qt6 Plugins kopieren
-          cp -P ${{ env.SYSROOT }}/usr/local/qt6/plugins/sqldrivers/libqsqlite.so ./release/sqldrivers/
-          cp -P ${{ env.SYSROOT }}/usr/local/qt6/plugins/imageformats/libqico.so ./release/imageformats/
-          cp -P ${{ env.SYSROOT }}/usr/local/qt6/plugins/imageformats/libqjpeg.so ./release/imageformats/
+          # 5. Qt6 Plugins in die richtigen Unterordner innerhalb von lib
+          cp -P ${{ env.SYSROOT }}/usr/local/qt6/plugins/sqldrivers/libqsqlite.so ./release/lib/plugins/sqldrivers/
+          cp -P ${{ env.SYSROOT }}/usr/local/qt6/plugins/imageformats/libqico.so ./release/lib/plugins/imageformats/
+          cp -P ${{ env.SYSROOT }}/usr/local/qt6/plugins/imageformats/libqjpeg.so ./release/lib/plugins/imageformats/
 
-          # 6. Python Runtime Inhalt kopieren
+          # 6. Python Runtime
           cp -r -t ./release/python/lib -- "${{ env.SYSROOT }}/usr/lib/python3.10"/* 2>/dev/null || true
 
           # 7. OPTIONAL: Binaries verkleinern (entfernt Debug-Symbole, spart ca. 10-15 MB)
@@ -201,9 +204,10 @@ jobs:
           mkdir -p ./dist && rm -rf ./dist/service && cp -r -T -- ./service/build/dist ./dist/service
       - name: Copy hyperion.ng into dist/service/hyperion
         run: |
-          rm -rf ./dist/service/hyperion && mkdir -p ./dist/service/hyperion
-          # ARCHIV-Modus (-a) kopiert Symlinks korrekt als Symlinks!
-          cp -r -T ./hyperion.ng-build/. ./dist/service/hyperion/
+          rm -rf ./dist/service/hyperion
+          mkdir -p ./dist/service/hyperion
+          # Kopiert die gesamte Struktur (bin, lib, python)
+          cp -a ./hyperion.ng-build/. ./dist/service/hyperion/
           rm -f ./dist/service/hyperion/flatc
       - name: Ensure executables +x
         run: |
