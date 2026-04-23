@@ -120,8 +120,7 @@ jobs:
             -DENABLE_FORWARDER=ON \
             -DENABLE_FLATBUF_CONNECT=ON \
             -G Ninja
-          cmake --build .
-          popd
+          ninja
 
 
       - name: "Staging: Final Cleanup and Copy"
