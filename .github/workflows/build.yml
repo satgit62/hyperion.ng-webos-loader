@@ -131,42 +131,36 @@ jobs:
             libQt6Gui.so.6 libQt6Network.so.6 libQt6Widgets.so.6 libQt6Core.so.6 
             libQt6Sql.so.6 libQt6SerialPort.so.6 libQt6WebSockets.so.6
         run: |
-          # 1. Struktur erstellen: bin für Programme, lib für Bibliotheken
           rm -rf ./release
-          mkdir -p ./release/bin
-          mkdir -p ./release/lib/plugins/sqldrivers
-          mkdir -p ./release/lib/plugins/imageformats
-          mkdir -p ./release/python/lib
+          mkdir -p ./release/bin ./release/lib/plugins/sqldrivers ./release/lib/plugins/imageformats ./release/python/lib
 
-          # 2. Programme in den bin-Ordner
+          # Programme in bin/
           cp -P ./hyperion.ng/${{ env.BUILD_DIR }}/bin/hyperiond ./release/bin/
           cp -P ./hyperion.ng/${{ env.BUILD_DIR }}/bin/hyperion-remote ./release/bin/
 
-          # 3. System-Libs in den lib-Ordner
+          # System-Libs in lib/
           for i in ${{ env.dependency_libs }}; do 
             find "${{ env.SYSROOT }}/" -name "${i}" -exec cp -P -t ./release/lib -- {} +; 
           done
 
-          # 4. Qt6-Libs in den lib-Ordner
+          # Qt6-Libs in lib/
           for i in ${{ env.qt6_libs }}; do 
             find "${{ env.SYSROOT }}/usr/local/qt6/lib/" -name "${i}*" -exec cp -P -t ./release/lib -- {} +; 
           done
 
-          # 5. Qt6 Plugins in die richtigen Unterordner innerhalb von lib
+          # Plugins in lib/plugins/
           cp -P ${{ env.SYSROOT }}/usr/local/qt6/plugins/sqldrivers/libqsqlite.so ./release/lib/plugins/sqldrivers/
           cp -P ${{ env.SYSROOT }}/usr/local/qt6/plugins/imageformats/libqico.so ./release/lib/plugins/imageformats/
           cp -P ${{ env.SYSROOT }}/usr/local/qt6/plugins/imageformats/libqjpeg.so ./release/lib/plugins/imageformats/
 
-          # 6. Python Runtime
+          # Python
           cp -r -t ./release/python/lib -- "${{ env.SYSROOT }}/usr/lib/python3.10"/* 2>/dev/null || true
 
-          # 7. OPTIONAL: Binaries verkleinern (entfernt Debug-Symbole, spart ca. 10-15 MB)
-          ${{ env.TOOLCHAIN_DIR }}/bin/arm-webos-linux-gnueabi-strip ./release/hyperiond
-          ${{ env.TOOLCHAIN_DIR }}/bin/arm-webos-linux-gnueabi-strip ./release/hyperion-remote
+          # Strip (Pfade korrigiert auf ./release/bin/...)
+          ${{ env.TOOLCHAIN_DIR }}/bin/arm-webos-linux-gnueabi-strip ./release/bin/hyperiond
+          ${{ env.TOOLCHAIN_DIR }}/bin/arm-webos-linux-gnueabi-strip ./release/bin/hyperion-remote
           
-          # Kontrolle im Log
-          ls -F ./release
-
+          ls -R ./release
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -211,9 +205,12 @@ jobs:
           rm -f ./dist/service/hyperion/flatc
       - name: Ensure executables +x
         run: |
-          chmod +x ./dist/service/autostart.sh ./dist/service/loader_service ./dist/service/start_hyperiond
-          chmod +x ./dist/service/hyperion/hyperiond ./dist/service/hyperion/hyperion-remote
-          chmod -R +r ./dist/service/hyperion
+          chmod +x ./dist/service/start_hyperiond
+          # Pfad zu den Binaries innerhalb des IPK-Struktur korrigiert
+          chmod +x ./dist/service/hyperion/bin/hyperiond
+          chmod +x ./dist/service/hyperion/bin/hyperion-remote
+          chmod -R +r ./dist/service/hyperion/lib
+
       - run: npm run package
       - run: npm run gen-manifest
       - name: Upload IPK Artifact
