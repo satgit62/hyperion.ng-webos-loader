@@ -1,17 +1,12 @@
 #!/bin/sh
 LOGFILE="/tmp/hyperion.ng.log"
-BASEDIR="/media/developer/apps/usr/palm/services/org.webosbrew.hyperion.ng.loader.service/hyperion"
+SERVICE_DIR="/media/developer/apps/usr/palm/services/org.webosbrew.hyperion.ng.loader.service"
+HYPERION_DIR="$SERVICE_DIR/hyperion"
 
-# 1. Den Pfad für die flachen Bibliotheken setzen
-export LD_LIBRARY_PATH=$BASEDIR:$LD_LIBRARY_PATH
+# Pfade für Qt6 und Bibliotheken
+export LD_LIBRARY_PATH=$HYPERION_DIR/lib:$LD_LIBRARY_PATH
+export QT_PLUGIN_PATH=$HYPERION_DIR/lib/plugins
+export PYTHONHOME=$HYPERION_DIR/python
 
-# 2. WICHTIG für Qt6: Plugins (sqldrivers, imageformats) im App-Ordner finden
-export QT_PLUGIN_PATH=$BASEDIR
-
-# 3. WICHTIG für Python: Damit Hyperion seine Python-Umgebung findet
-export PYTHONHOME=$BASEDIR/python
-
-# 4. Startbefehl mit den nötigen Fixes
-# OPENSSL_armcap=0 bleibt drin, falls dein TV Probleme mit bestimmten CPU-Befehlen hat
-# -u /var/lib/hyperion sorgt dafür, dass die Konfiguration im beschreibbaren Speicher landet
-OPENSSL_armcap=0 exec $BASEDIR/hyperiond -u /var/lib/hyperion "$@" > $LOGFILE 2>&1
+# Start aus dem bin/ Unterordner
+OPENSSL_armcap=0 exec $HYPERION_DIR/bin/hyperiond -u /var/lib/hyperion "$@" > $LOGFILE 2>&1
