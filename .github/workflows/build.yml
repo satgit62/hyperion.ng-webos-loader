@@ -203,7 +203,7 @@ jobs:
         run: |
           rm -rf ./dist/service/hyperion && mkdir -p ./dist/service/hyperion
           # ARCHIV-Modus (-a) kopiert Symlinks korrekt als Symlinks!
-          cp -a ./hyperion.ng-build/. ./dist/service/hyperion/
+          cp -r -T ./hyperion.ng-build/. ./dist/service/hyperion/
           rm -f ./dist/service/hyperion/flatc
       - name: Ensure executables +x
         run: |
