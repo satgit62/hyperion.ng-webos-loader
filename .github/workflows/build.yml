@@ -82,7 +82,7 @@ jobs:
           ninja install
 
           for mod in qtserialport qtwebsockets qtimageformats; do
-            git clone --branch "v${QT_VERSION}" --depth 1 "https://github.com{mod}.git" "/opt/qt_build/${mod}"
+            git clone --branch "v${QT_VERSION}" --depth 1 "https://github.com/qt/${mod}.git" "/opt/qt_build/${mod}"
             mkdir -p "/opt/qt_build/${mod}/build" && cd "/opt/qt_build/${mod}/build"
             cmake .. -DCMAKE_TOOLCHAIN_FILE="${{ env.TOOLCHAIN_FILE }}" -DQT_HOST_PATH="${{ env.QT_TOOLCHAIN_DIR }}" -DCMAKE_PREFIX_PATH="${{ env.SYSROOT }}/usr/local/qt6" -DCMAKE_INSTALL_PREFIX="/usr/local/qt6" -DCMAKE_STAGING_PREFIX="${{ env.SYSROOT }}/usr/local/qt6" -GNinja
             ninja install
