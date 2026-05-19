@@ -168,7 +168,7 @@ jobs:
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: hyperion-webos-qt6
+          name: hyperion.ng-webos-binaries
           path: ./release/
 
 
