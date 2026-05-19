@@ -102,7 +102,6 @@ jobs:
             -DCMAKE_TOOLCHAIN_FILE="${{ env.TOOLCHAIN_FILE }}" \
             -DQT_HOST_PATH="${{ env.QT_TOOLCHAIN_DIR }}" \
             -DCMAKE_PREFIX_PATH="${{ env.SYSROOT }}/usr/local/qt6" \
-            -DCMAKE_BUILD_TYPE=Debug \
             -DPython3_EXECUTABLE="${{ env.TOOLCHAIN_DIR }}/bin/python3" \
             -DCMAKE_BUILD_TYPE=Release \
             -DPLATFORM=rpi \
@@ -134,8 +133,8 @@ jobs:
           gcc_runtime_libs: >-
             libstdc++.so.6 libatomic.so.1
           qt6_libs: >-
-            libQt6Gui.so.6 libQt6Network.so.6 libQt6Widgets.so.6 libQt6Core.so.6 libQt6EglFSDeviceIntegration.so.6 libQt6OpenGL.so.6
-            libQt6Sql.so.6 libQt6SerialPort.so.6 libQt6WebSockets.so.6 libQt6DBus.so.6 libQt6XcbQpa.so.6
+            libQt6Gui.so.6 libQt6Network.so.6 libQt6Widgets.so.6 libQt6Core.so.6 libQt6Sql.so.6 libQt6SerialPort.so.6 libQt6WebSockets.so.6 libQt6DBus.so.6
+            
         run: |
           rm -rf ./release
           # Erstelle alle notwendigen Ordnerstrukturen
