@@ -56,7 +56,7 @@ jobs:
           
           # 1. Host Build
           mkdir -p /opt/qt_build/host && cd /opt/qt_build/host
-          cmake /opt/qt_build/qt_source -DCMAKE_INSTALL_PREFIX=${{ env.QT_TOOLCHAIN_DIR }} -DCMAKE_BUILD_TYPE=Release -DQT_FEATURE_gui=OFF -DQT_FEATURE_opengl=OFF -DQT_FEATURE_dbus=ON -DQT_BUILD_TESTS=OFF -DQT_BUILD_EXAMPLES=OFF -GNinja
+          cmake /opt/qt_build/qt_source -DCMAKE_INSTALL_PREFIX=${{ env.QT_TOOLCHAIN_DIR }} -DCMAKE_BUILD_TYPE=Release -DQT_FEATURE_gui=OFF -DQT_FEATURE_opengl=OFF -DQT_FEATURE_dbus=ON -DQT_BUILD_TESTS=OFF -DFEATURE_icu=OFF -DQT_BUILD_EXAMPLES=OFF -GNinja
           ninja install
           # 2. Preparation & Patches
           cd /opt/qt_build/qt_source
@@ -67,7 +67,7 @@ jobs:
                     
           # 3. Cross Build
           mkdir -p /opt/qt_build/base_cross && cd /opt/qt_build/base_cross
-          cmake /opt/qt_build/qt_source -DCMAKE_TOOLCHAIN_FILE=${{ env.TOOLCHAIN_FILE }} -DQT_HOST_PATH=${{ env.QT_TOOLCHAIN_DIR }} -DCMAKE_INSTALL_PREFIX=/usr/local/qt6 -DCMAKE_STAGING_PREFIX=${{ env.SYSROOT }}/usr/local/qt6 -DCMAKE_BUILD_TYPE=Release -DQT_FEATURE_dbus=ON -DQT_FEATURE_gui=ON -DQT_FEATURE_widgets=ON -DQT_FEATURE_opengl=OFF -GNinja -DQt6CoreTools_DIR=${{ env.QT_TOOLCHAIN_DIR }}/lib/cmake/Qt6CoreTools -DQt6DBusTools_DIR=${{ env.QT_TOOLCHAIN_DIR }}/lib/cmake/Qt6DBusTools -DQt6WidgetsTools_DIR=${{ env.QT_TOOLCHAIN_DIR }}/lib/cmake/Qt6WidgetsTools -DQt6GuiTools_DIR=${{ env.QT_TOOLCHAIN_DIR }}/lib/cmake/Qt6GuiTools
+          cmake /opt/qt_build/qt_source -DCMAKE_TOOLCHAIN_FILE=${{ env.TOOLCHAIN_FILE }} -DQT_HOST_PATH=${{ env.QT_TOOLCHAIN_DIR }} -DCMAKE_INSTALL_PREFIX=/usr/local/qt6 -DCMAKE_STAGING_PREFIX=${{ env.SYSROOT }}/usr/local/qt6 -DCMAKE_BUILD_TYPE=Release -DQT_FEATURE_dbus=ON -DQT_FEATURE_gui=ON -DQT_FEATURE_widgets=ON -DQT_FEATURE_opengl=OFF -DFEATURE_icu=OFF -GNinja -DQt6CoreTools_DIR=${{ env.QT_TOOLCHAIN_DIR }}/lib/cmake/Qt6CoreTools -DQt6DBusTools_DIR=${{ env.QT_TOOLCHAIN_DIR }}/lib/cmake/Qt6DBusTools -DQt6WidgetsTools_DIR=${{ env.QT_TOOLCHAIN_DIR }}/lib/cmake/Qt6WidgetsTools -DQt6GuiTools_DIR=${{ env.QT_TOOLCHAIN_DIR }}/lib/cmake/Qt6GuiTools
           ninja install
           # --- 4. ADD-ON MODULES ---
           for mod in qtserialport qtwebsockets qtimageformats; do
@@ -128,7 +128,7 @@ jobs:
         env:
           dependency_libs: >-
             libpython3.10.so.1.0 libpng16.so.16 libjpeg.so.8 libcrypt.so.1 libcrypto.so.1.1 libbz2.so.1
-            libz.so.1 libssl.so.1.1 libpcre2-16.so.0 libusb-1.0.so.0 libftdi1.so.2 libudev.so.1 libicui18n.so.70 libicuuc.so.70 libicudata.so.70 libxkbcommon.so.0
+            libz.so.1 libssl.so.1.1 libpcre2-16.so.0 libusb-1.0.so.0 libftdi1.so.2 libudev.so.1 libxkbcommon.so.0
             libfontconfig.so.1 libglib-2.0.so.0 libfreetype.so.6 libz.so.1 libgthread-2.0.so.0 libgcc_s.so.1
           gcc_runtime_libs: >-
             libstdc++.so.6 libatomic.so.1
