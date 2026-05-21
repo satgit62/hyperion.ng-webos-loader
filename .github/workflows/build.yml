@@ -155,16 +155,13 @@ jobs:
           for i in ${{ env.qt6_libs }}; do
             find "${{ env.SYSROOT }}/usr/local/qt6/lib/" -name "${i}" -exec cp -L {} ./release/ \; 2>/dev/null | head -1
           done
-
           # 3. Qt6 Plugins kopieren (WICHTIG!)
           echo "Copying Qt6 Plugins..."
           cp -L "${{ env.SYSROOT }}/usr/local/qt6/plugins/sqldrivers/"*.so ./release/sqldrivers/ 2>/dev/null || true
           cp -L "${{ env.SYSROOT }}/usr/local/qt6/plugins/imageformats/"*.so ./release/imageformats/ 2>/dev/null || true
-
           # 4. Python Standard Library Struktur kopieren
           echo "Copying Python Libs..."
           cp -r "${{ env.SYSROOT }}/usr/lib/python3.10/"* ./release/python/lib/python3.10/
-
           # 5. Stripping - Platzersparnis (ca. 70%)
           echo "Stripping binaries..."
           STRIP="${{ env.TOOLCHAIN_DIR }}/bin/arm-webos-linux-gnueabi-strip"
@@ -173,8 +170,6 @@ jobs:
           find ./release/python/lib/python3.10/lib-dynload -name "*.so" -exec $STRIP --strip-unneeded {} + || true
           find ./release/sqldrivers -name "*.so" -exec $STRIP --strip-unneeded {} + || true
           find ./release/imageformats -name "*.so" -exec $STRIP --strip-unneeded {} + || true
-
-
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
