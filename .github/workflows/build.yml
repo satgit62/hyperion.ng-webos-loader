@@ -18,7 +18,7 @@ jobs:
       - name: Checkout hyperion.ng
         uses: actions/checkout@v4
         with:
-          repository: https://github.com/Lord-Grey/hyperion.ng
+          repository: Lord-Grey/hyperion.ng
           ref: ssl
           path: hyperion.ng
           submodules: recursive
