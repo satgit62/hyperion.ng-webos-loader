@@ -84,6 +84,8 @@ jobs:
               -DCMAKE_PREFIX_PATH="${{ env.SYSROOT }}/usr/local/qt6" \
               -DCMAKE_INSTALL_PREFIX="/usr/local/qt6" \
               -DCMAKE_STAGING_PREFIX="${{ env.SYSROOT }}/usr/local/qt6" \
+              -DINPUT_openssl=runtime \
+              -DQT_FEATURE_ssl=ON \
               -GNinja
             ninja install
           done
@@ -141,6 +143,7 @@ jobs:
           mkdir -p ./release/python/lib/python3.10
           mkdir -p ./release/sqldrivers
           mkdir -p ./release/imageformats
+          mkdir -p ./release/tls
           
           # 1. Hyperion Binaries kopieren
           cp -r -T -- "./hyperion.ng/${{ env.BUILD_DIR }}/bin" ./release
@@ -159,6 +162,7 @@ jobs:
           echo "Copying Qt6 Plugins..."
           cp -L "${{ env.SYSROOT }}/usr/local/qt6/plugins/sqldrivers/"*.so ./release/sqldrivers/ 2>/dev/null || true
           cp -L "${{ env.SYSROOT }}/usr/local/qt6/plugins/imageformats/"*.so ./release/imageformats/ 2>/dev/null || true
+          cp -L "${{ env.SYSROOT }}/usr/local/qt6/plugins/tls/"*.so ./release/tls/ 2>/dev/null || true
           # 4. Python Standard Library Struktur kopieren
           echo "Copying Python Libs..."
           cp -r "${{ env.SYSROOT }}/usr/lib/python3.10/"* ./release/python/lib/python3.10/
