@@ -48,8 +48,6 @@ jobs:
           cd ${{ env.TOOLCHAIN_DIR }}
           ./relocate-sdk.sh
       - name: "Build QT6 (Host & Cross)"
-        env:
-           CMAKE_BUILD_PARALLEL_LEVEL: 2
         if: steps.cache-toolchain.outputs.cache-hit != 'true'
         run: |
           sudo mkdir -p /opt/qt_build ${{ env.QT_TOOLCHAIN_DIR }}
@@ -59,7 +57,9 @@ jobs:
           # 1. Host Build
           mkdir -p /opt/qt_build/host && cd /opt/qt_build/host
           cmake /opt/qt_build/qt_source -DCMAKE_INSTALL_PREFIX=${{ env.QT_TOOLCHAIN_DIR }} -DCMAKE_BUILD_TYPE=Release -DQT_FEATURE_gui=OFF -DQT_FEATURE_opengl=OFF -DQT_FEATURE_dbus=ON -DQT_BUILD_TESTS=OFF -DFEATURE_icu=OFF -DQT_BUILD_EXAMPLES=OFF -GNinja
-          ninja install
+          # KORREKTUR: Begrenzung auf maximal 2 parallele Compiler-Threads gegen OOM
+          ninja install -j 2
+          
           # 2. Preparation & Patches
           cd /opt/qt_build/qt_source
           mkdir -p mkspecs/devices/linux-webos-g++
@@ -70,12 +70,13 @@ jobs:
           # 3. Cross Build
           mkdir -p /opt/qt_build/base_cross && cd /opt/qt_build/base_cross
           cmake /opt/qt_build/qt_source -DCMAKE_TOOLCHAIN_FILE=${{ env.TOOLCHAIN_FILE }} -DQT_HOST_PATH=${{ env.QT_TOOLCHAIN_DIR }} -DCMAKE_INSTALL_PREFIX=/usr/local/qt6 -DCMAKE_STAGING_PREFIX=${{ env.SYSROOT }}/usr/local/qt6 -DCMAKE_BUILD_TYPE=Release -DQT_FEATURE_dbus=ON -DQT_FEATURE_gui=ON -DQT_FEATURE_widgets=ON -DQT_FEATURE_opengl=OFF -DFEATURE_icu=OFF -GNinja -DQt6CoreTools_DIR=${{ env.QT_TOOLCHAIN_DIR }}/lib/cmake/Qt6CoreTools -DQt6DBusTools_DIR=${{ env.QT_TOOLCHAIN_DIR }}/lib/cmake/Qt6DBusTools -DQt6WidgetsTools_DIR=${{ env.QT_TOOLCHAIN_DIR }}/lib/cmake/Qt6WidgetsTools -DQt6GuiTools_DIR=${{ env.QT_TOOLCHAIN_DIR }}/lib/cmake/Qt6GuiTools
-          ninja install
+          # KORREKTUR: Begrenzung auf maximal 2 parallele Compiler-Threads gegen OOM
+          ninja install -j 2
+          
           # --- 4. ADD-ON MODULES ---
           for mod in qtserialport qtwebsockets qtimageformats; do
             echo "Building module: $mod"
             
-            # CORRECTION: Use the /qt/ path and the important $ sign before {mod}
             git clone --branch "v${QT_VERSION}" --depth 1 "https://github.com/qt/${mod}.git" "/opt/qt_build/${mod}"
             
             mkdir -p "/opt/qt_build/${mod}/build" && cd "/opt/qt_build/${mod}/build"
@@ -89,13 +90,14 @@ jobs:
               -DINPUT_openssl=runtime \
               -DQT_FEATURE_ssl=ON \
               -GNinja
-            ninja install
+            # KORREKTUR: Begrenzung auf maximal 2 parallele Compiler-Threads gegen OOM
+            ninja install -j 2
           done
+
       - name: Build Hyperion
         env:
           CCACHE_DIR: ${{ github.workspace }}/${{ env.CCACHE_DIR }}
         run: |
-          # Change to the directory where Hyperion was cloned
           cd hyperion.ng
           mkdir -p "${{ env.BUILD_DIR }}"
           cd "${{ env.BUILD_DIR }}"
@@ -127,7 +129,9 @@ jobs:
             -DENABLE_FORWARDER=ON \
             -DENABLE_FLATBUF_CONNECT=ON \
             -G Ninja
-          ninja
+          # KORREKTUR: Auch beim eigentlichen App-Build RAM-Abstürze verhindern
+          ninja -j 2
+
       - name: Copy built binaries and dependencies to release/
         env:
           dependency_libs: >-
