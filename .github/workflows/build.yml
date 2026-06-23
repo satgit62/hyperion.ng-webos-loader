@@ -86,6 +86,7 @@ jobs:
               -DCMAKE_STAGING_PREFIX="${{ env.SYSROOT }}/usr/local/qt6" \
               -DINPUT_openssl=runtime \
               -DQT_FEATURE_ssl=ON \
+              -DQT_FEATURE_forkfd=OFF \
               -GNinja
             ninja install
           done
