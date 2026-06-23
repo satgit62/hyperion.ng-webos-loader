@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
 
 env:
-  TOOLCHAIN_URL: https://github.com/openlgtv/buildroot-nc4/releases/download/webos-d7ed7ee/arm-webos-linux-gnueabi_sdk-buildroot.tar.gz
+  TOOLCHAIN_URL: https://github.com/openlgtv/buildroot-nc4/releases/download/webos-f65ef91/arm-webos-linux-gnueabi_sdk-buildroot.tar.gz
   TOOLCHAIN_DIR: /opt/arm-webos-linux-gnueabi_sdk-buildroot
   TOOLCHAIN_FILE: /opt/arm-webos-linux-gnueabi_sdk-buildroot/share/buildroot/toolchainfile.cmake
   BUILD_DIR: build
@@ -56,7 +56,7 @@ jobs:
           
           # 1. Host Build
           mkdir -p /opt/qt_build/host && cd /opt/qt_build/host
-          cmake /opt/qt_build/qt_source -DCMAKE_INSTALL_PREFIX=${{ env.QT_TOOLCHAIN_DIR }} -DCMAKE_BUILD_TYPE=Release -DQT_FEATURE_gui=OFF -DQT_FEATURE_opengl=OFF -DQT_FEATURE_forkfd=OFF -DQT_FEATURE_dbus=ON -DQT_BUILD_TESTS=OFF -DFEATURE_icu=OFF -DQT_BUILD_EXAMPLES=OFF -GNinja
+          cmake /opt/qt_build/qt_source -DCMAKE_INSTALL_PREFIX=${{ env.QT_TOOLCHAIN_DIR }} -DCMAKE_BUILD_TYPE=Release -DQT_FEATURE_gui=OFF -DQT_FEATURE_opengl=OFF -DQT_FEATURE_dbus=ON -DQT_BUILD_TESTS=OFF -DFEATURE_icu=OFF -DQT_BUILD_EXAMPLES=OFF -GNinja
           ninja install
           # 2. Preparation & Patches
           cd /opt/qt_build/qt_source
@@ -86,7 +86,6 @@ jobs:
               -DCMAKE_STAGING_PREFIX="${{ env.SYSROOT }}/usr/local/qt6" \
               -DINPUT_openssl=runtime \
               -DQT_FEATURE_ssl=ON \
-              -DQT_FEATURE_forkfd=OFF \
               -GNinja
             ninja install
           done
