@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
 
 env:
-  TOOLCHAIN_URL: https://github.com/openlgtv/buildroot-nc4/releases/download/webos-f65ef91/arm-webos-linux-gnueabi_sdk-buildroot.tar.gz
+  TOOLCHAIN_URL: https://github.com/openlgtv/buildroot-nc4/releases/download/webos-d7ed7ee/arm-webos-linux-gnueabi_sdk-buildroot.tar.gz
   TOOLCHAIN_DIR: /opt/arm-webos-linux-gnueabi_sdk-buildroot
   TOOLCHAIN_FILE: /opt/arm-webos-linux-gnueabi_sdk-buildroot/share/buildroot/toolchainfile.cmake
   BUILD_DIR: build
@@ -48,6 +48,8 @@ jobs:
           cd ${{ env.TOOLCHAIN_DIR }}
           ./relocate-sdk.sh
       - name: "Build QT6 (Host & Cross)"
+        env:
+           CMAKE_BUILD_PARALLEL_LEVEL: 2
         if: steps.cache-toolchain.outputs.cache-hit != 'true'
         run: |
           sudo mkdir -p /opt/qt_build ${{ env.QT_TOOLCHAIN_DIR }}
